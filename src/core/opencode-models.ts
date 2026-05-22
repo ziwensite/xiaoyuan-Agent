@@ -83,7 +83,9 @@ export function modelInputModalities(model: Pick<Model, "capabilities"> | null |
 export function flattenOpenCodeModels(providers: Provider[]): AgentModelInfo[] {
   const models: AgentModelInfo[] = [];
   for (const provider of providers) {
+    if (!provider.configured) continue;
     for (const model of Object.values(provider.models ?? {})) {
+      if (!model.enabled) continue;
       models.push({
         id: `${provider.id}/${model.id}`,
         providerId: provider.id,
