@@ -1,7 +1,5 @@
 import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, setIcon, TFile, type FuzzyMatch } from "obsidian";
 import type CodexForObsidianPlugin from "../main";
-import { diagnoseCodexError } from "../core/codex-diagnostics";
-import { detectCodexCommand } from "../core/codex-service";
 import { OpenCodeBackend } from "../core/opencode-backend";
 import { detectOpenCodeCommand } from "../core/opencode-models";
 import type { AgentModelInfo, AgentProfileInfo } from "../agent/types";
@@ -54,7 +52,7 @@ import { confirmModal } from "../ui/modals";
 import { SETTINGS_LANGUAGE_OPTIONS, settingsCopy, type SettingsCopy } from "./i18n";
 import { buildSetupCheck, completeSetupState, type SetupAction, type SetupCheckResult, type SetupPlatform } from "./setup-check";
 
-export class CodexSettingTab extends PluginSettingTab {
+export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private resourceSnapshot: WorkspaceResourceSnapshot | null = null;
   private resourceLoadingTab: ResourceManagementTab | null = null;
   private resourceLoaded: Record<ResourceManagementTab, boolean> = { plugins: false, mcp: false, skills: false };
@@ -95,9 +93,7 @@ export class CodexSettingTab extends PluginSettingTab {
     } else {
       this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "user-check", copy.status.accountStatus, status?.connected ? (status.accountLabel ?? copy.common.unknown) : copy.common.disconnected);
-      this.addStatusRow(statusBox, "route", copy.status.agentBackend, agentBackendLabel(this.plugin.settings.agentBackend, copy));
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
-      this.addStatusRow(statusBox, "terminal", copy.status.cliPath, detectCliPath(this.plugin.settings.cliPath, copy));
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
       this.addStatusRow(statusBox, "waypoints", copy.status.proxy, this.plugin.settings.proxyEnabled ? this.plugin.settings.proxyUrl : copy.common.disabled);
       this.addStatusRow(statusBox, "blocks", copy.status.chatMcp, this.plugin.settings.mcpEnabled ? copy.common.enabled : copy.common.disabled);
@@ -146,38 +142,7 @@ export class CodexSettingTab extends PluginSettingTab {
       });
     }), "languages");
 
-    this.decorateSetting(
-      new Setting(containerEl)
-      .setName(copy.general.agentBackend)
-      .setDesc(copy.general.agentBackendDesc)
-      .addDropdown((dropdown) => {
-        const options: Record<AgentBackendMode, string> = {
-          "codex-cli": "Codex CLI",
-          opencode: "OpenCode API"
-        };
-        for (const [value, label] of Object.entries(options)) dropdown.addOption(value, label);
-        dropdown.setValue(this.plugin.settings.agentBackend);
-        dropdown.onChange(async (value) => {
-          this.plugin.settings.agentBackend = normalizeAgentBackendForUi(value);
-          await this.plugin.saveSettings();
-          this.display();
-        });
-      }),
-      "route"
-    );
-
-    this.decorateSetting(
-      new Setting(containerEl)
-      .setName(copy.general.cliPath)
-      .setDesc(copy.general.cliPathDesc)
-      .addText((text) =>
-        text.setPlaceholder("~/.npm-global/bin/codex").setValue(this.plugin.settings.cliPath).onChange(async (value) => {
-          this.plugin.settings.cliPath = value.trim();
-          await this.plugin.saveSettings();
-        })
-      ),
-      "terminal"
-    );
+    
 
     this.decorateSetting(new Setting(containerEl).setName(copy.general.proxyEnabled).setDesc(copy.general.proxyEnabledDesc).addToggle((toggle) =>
       toggle.setValue(this.plugin.settings.proxyEnabled).onChange(async (value) => {
@@ -283,16 +248,7 @@ export class CodexSettingTab extends PluginSettingTab {
       })
     ), "pie-chart");
 
-    this.decorateSetting(new Setting(containerEl).addButton((button) =>
-      button
-        .setButtonText(copy.general.reconnect)
-        .setCta()
-        .onClick(async () => {
-          await this.plugin.reconnectCodex();
-          this.display();
-        })
-    ), "refresh-cw");
-  }
+    }
 
   private renderKnowledgeBaseSettings(container: HTMLElement): void {
     const copy = this.copy;
@@ -327,7 +283,7 @@ export class CodexSettingTab extends PluginSettingTab {
     const initChannel = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.initChannel, attr: { type: "button" } });
     initChannel.onclick = async () => {
       await this.plugin.activateKnowledgeBaseChannel();
-      this.plugin.getCodexView()?.fillKnowledgeBaseCommand("/init ");
+      this.plugin.getXiaoyuanView()?.fillKnowledgeBaseCommand("/init ");
       this.display();
     };
 
@@ -342,20 +298,7 @@ export class CodexSettingTab extends PluginSettingTab {
       })
     ), "toggle-right");
 
-    this.decorateSetting(new Setting(wrapper).setName(copy.knowledge.backend).setDesc(copy.knowledge.backendDesc).addDropdown((dropdown) => {
-      const options: Record<KnowledgeBaseBackendMode, string> = {
-        default: copy.knowledge.followGlobal(agentBackendLabel(this.plugin.settings.agentBackend, copy)),
-        "codex-cli": "Codex CLI",
-        opencode: "OpenCode API"
-      };
-      for (const [value, label] of Object.entries(options)) dropdown.addOption(value, label);
-      dropdown.setValue(settings.backend);
-      dropdown.onChange(async (value) => {
-        settings.backend = normalizeKnowledgeBackendForUi(value);
-        await this.plugin.saveSettings();
-        this.display();
-      });
-    }), "route");
+    
 
     this.decorateSetting(new Setting(wrapper).setName(copy.knowledge.customRules).setDesc(copy.knowledge.customRulesDesc(DEFAULT_KNOWLEDGE_BASE_RULES_FILE, AGENTS_RULES_FILE)).addToggle((toggle) =>
       toggle.setValue(settings.useCustomRulesFile).onChange(async (value) => {
@@ -665,11 +608,8 @@ export class CodexSettingTab extends PluginSettingTab {
     this.setupChecking = true;
     this.display();
     try {
-      await this.plugin.reconnectCodex({ refreshLogin: true });
-      const check = buildSetupCheck(this.plugin.settings, this.plugin.lastStatus, this.detectSetupPlatform());
-      if (check.knowledgeBackend === "opencode" || check.requirements.some((item) => item.id === "opencode-cli" && item.status === "ok")) {
-        await this.refreshOpenCodeRuntimeOptions({ models: true, agents: true });
-      }
+      await this.plugin.ensureOpenCodeConnected();
+      await this.refreshOpenCodeRuntimeOptions({ models: true, agents: true });
       this.plugin.settings.setup.lastCheckedAt = Date.now();
       await this.plugin.saveSettings(true);
     } finally {
@@ -693,7 +633,6 @@ export class CodexSettingTab extends PluginSettingTab {
   private detectSetupPlatform(): SetupPlatform {
     return {
       os: process.platform,
-      codexCommand: detectCodexCommand(this.plugin.settings.cliPath),
       openCodeCommand: detectOpenCodeCommand(this.plugin.settings.opencode.cliPath)
     };
   }
@@ -711,7 +650,7 @@ export class CodexSettingTab extends PluginSettingTab {
     refresh.onclick = async () => {
       refresh.disabled = true;
       label.setText(copy.status.refreshing);
-      const status = await this.plugin.reconnectCodex({ refreshLogin: true });
+      const status = await this.plugin.ensureOpenCodeConnected(true);
       if (status.connected) new Notice(copy.status.refreshSuccess(status.accountLabel));
       else new Notice(copy.status.refreshFailed(status.errors[0] ?? copy.common.unknown));
       this.display();
@@ -722,19 +661,12 @@ export class CodexSettingTab extends PluginSettingTab {
     if (!errors.length) return;
     const copy = this.copy;
     for (const error of errors.slice(0, 3)) {
-      const diagnostic = diagnoseCodexError(error, {
-        model: this.plugin.settings.defaultModel,
-        providerLabel: providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage),
-        proxyEnabled: this.plugin.settings.proxyEnabled,
-        proxyUrl: this.plugin.settings.proxyUrl,
-        language: this.plugin.settings.settingsLanguage
-      });
       const card = container.createDiv({ cls: "codex-settings-status-error" });
       const title = card.createDiv({ cls: "codex-settings-status-error-title" });
       const icon = title.createSpan({ cls: "codex-settings-status-icon" });
       setIcon(icon, "triangle-alert");
       title.createSpan({ text: copy.status.diagnostics });
-      card.createEl("pre", { cls: "codex-settings-status-error-body", text: diagnostic.text });
+      card.createEl("pre", { cls: "codex-settings-status-error-body", text: error });
     }
   }
 
@@ -780,17 +712,6 @@ export class CodexSettingTab extends PluginSettingTab {
       cls: "codex-resource-summary",
       text: copy.common.current(providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage))
     });
-    const loginButton = modeRow.createEl("button", {
-      cls: `codex-resource-tab ${this.plugin.settings.providerMode === "codex-login" ? "is-active" : ""}`,
-      text: copy.providers.loginMode,
-      attr: { type: "button" }
-    });
-    loginButton.onclick = async () => {
-      this.plugin.settings.providerMode = "codex-login";
-      await this.plugin.saveSettings(true);
-      await this.plugin.reconnectCodex();
-      this.display();
-    };
 
     const add = header.createEl("button", {
       cls: "codex-resource-refresh",
@@ -1047,7 +968,7 @@ export class CodexSettingTab extends PluginSettingTab {
       this.plugin.settings.providerMode = "custom-api";
       this.plugin.settings.activeApiProviderId = provider.id;
       await this.plugin.saveSettings(true);
-      await this.plugin.reconnectCodex();
+      await this.plugin.ensureOpenCodeConnected(true);
       this.display();
     };
 
@@ -1061,7 +982,7 @@ export class CodexSettingTab extends PluginSettingTab {
       const wasActive = this.plugin.settings.providerMode === "custom-api" && this.plugin.settings.activeApiProviderId === provider.id;
       removeApiProvider(this.plugin.settings, provider.id);
       await this.plugin.saveSettings(true);
-      if (wasActive) await this.plugin.reconnectCodex();
+      if (wasActive) await this.plugin.ensureOpenCodeConnected(true);
       this.display();
     };
 
@@ -1394,7 +1315,7 @@ export class CodexSettingTab extends PluginSettingTab {
       if (settings.useCustomRulesFile) settings.rulesFilePath = result.rulesFilePath;
       else settings.rulesFilePath = AGENTS_RULES_FILE;
       await this.plugin.saveSettings();
-      this.plugin.getCodexView()?.refreshKnowledgeBaseDashboard();
+      this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
       const detail = result.status === "patched" && result.missingRules.length
         ? copy.knowledge.repairPatchedDetail(result.missingRules.length)
         : "";
@@ -1682,8 +1603,8 @@ export class CodexSettingTab extends PluginSettingTab {
     delete this.resourceLoadErrors[tab];
     this.display();
     try {
-      const status = await this.plugin.ensureCodexConnected();
-      if (!status.connected || !this.plugin.codex) throw new Error(this.copy.resources.codexDisconnected);
+      const status = await this.plugin.ensureOpenCodeConnected();
+      if (!status.connected) throw new Error(this.copy.resources.codexDisconnected);
       const result = await this.loadResourceTab(tab);
       this.resourceSnapshot = mergeWorkspaceResourceSnapshot(this.resourceSnapshot, result.kind, result.data, result.error);
       this.resourceLoaded[tab] = true;
@@ -1713,17 +1634,25 @@ export class CodexSettingTab extends PluginSettingTab {
   }
 
   private async loadResourceTab(tab: ResourceManagementTab): Promise<{ kind: WorkspaceResourceKind; data: CodexPluginInfo[] | CodexSkill[] | McpServerStatus[]; error: string | null }> {
-    if (!this.plugin.codex) throw new Error(this.copy.resources.codexDisconnected);
-    if (tab === "plugins") {
-      const result = await this.plugin.codex.refreshPluginResources();
-      return { kind: "plugins", data: result.plugins, error: result.error };
+    const backend = new OpenCodeBackend({
+      ...this.plugin.settings.opencode,
+      vaultPath: this.plugin.getVaultPath()
+    });
+    try {
+      await backend.connect();
+      if (tab === "plugins") {
+        const result = await backend.refreshPluginResources();
+        return { kind: "plugins", data: result.plugins, error: result.error };
+      }
+      if (tab === "mcp") {
+        const result = await backend.refreshMcpStatus();
+        return { kind: "mcp", data: result.servers, error: result.error };
+      }
+      const result = await backend.refreshSkillResources();
+      return { kind: "skills", data: result.skills, error: result.error };
+    } finally {
+      await backend.disconnect().catch(() => undefined);
     }
-    if (tab === "mcp") {
-      const result = await this.plugin.codex.refreshMcpStatus();
-      return { kind: "mcp", data: result.servers, error: result.error };
-    }
-    const result = await this.plugin.codex.refreshSkillResources();
-    return { kind: "skills", data: result.skills, error: result.error };
   }
 
   private addStatusRow(container: HTMLElement, iconName: string, label: string, value: string): void {
@@ -1784,10 +1713,7 @@ function resourceKindForTab(tab: ResourceManagementTab): WorkspaceResourceKind {
   return tab === "mcp" ? "mcp" : tab === "skills" ? "skills" : "plugins";
 }
 
-function detectCliPath(customPath: string, copy: SettingsCopy = settingsCopy("zh-CN")): string {
-  const found = detectCodexCommand(customPath);
-  return found ? copy.common.detected(found) : copy.common.notDetectedManual;
-}
+
 
 function detectOpenCodePath(customPath: string, copy: SettingsCopy = settingsCopy("zh-CN")): string {
   const found = detectOpenCodeCommand(customPath);
@@ -1810,7 +1736,7 @@ function formatSetupTime(value: number): string {
 }
 
 function agentBackendLabel(value: AgentBackendMode, copy: SettingsCopy = settingsCopy("zh-CN")): string {
-  return copy.backendLabels[value] ?? (value === "opencode" ? "OpenCode API" : "Codex CLI");
+  return copy.backendLabels[value] ?? "OpenCode API";
 }
 
 function normalizeSettingsLanguageForUi(value: string): SettingsLanguage {
@@ -1846,11 +1772,11 @@ class KnowledgeBaseRulesFileSuggestModal extends FuzzySuggestModal<TFile> {
 }
 
 function normalizeAgentBackendForUi(value: string): AgentBackendMode {
-  return value === "opencode" ? "opencode" : "codex-cli";
+  return "opencode";
 }
 
 function normalizeKnowledgeBackendForUi(value: string): KnowledgeBaseBackendMode {
-  return value === "codex-cli" || value === "opencode" ? value : "default";
+  return value === "opencode" ? value : "default";
 }
 
 function knowledgeStatusLabel(value: string, copy: SettingsCopy = settingsCopy("zh-CN")): string {

@@ -78,10 +78,10 @@ export interface StoredSession {
 }
 
 export type SettingsTab = "general" | "providers" | "resources" | "editorActions" | "knowledgeBase" | "review";
-export type ProviderMode = "codex-login" | "custom-api";
+export type ProviderMode = "custom-api";
 export type ResourceManagementTab = "plugins" | "mcp" | "skills";
-export type AgentBackendMode = "codex-cli" | "opencode";
-export type KnowledgeBaseBackendMode = "default" | AgentBackendMode;
+export type AgentBackendMode = "opencode";
+export type KnowledgeBaseBackendMode = "opencode";
 export type KnowledgeBaseRunStatus = "idle" | "running" | "success" | "failed" | "canceled";
 export type KnowledgeBaseInitStatus = "not-started" | "preview-ready" | "initialized" | "failed";
 export type KnowledgeBaseCaptureTarget = "inbox" | "raw-articles" | "raw-attachments" | "journal";
@@ -218,7 +218,6 @@ export interface CodexForObsidianSettings {
   settingsLanguage: SettingsLanguage;
   settingsTab: SettingsTab;
   agentBackend: AgentBackendMode;
-  cliPath: string;
   proxyEnabled: boolean;
   proxyUrl: string;
   providerMode: ProviderMode;
@@ -405,14 +404,13 @@ export const DEFAULT_EDITOR_ACTION_MODE_CONFIGS: Record<EditorActionQualityMode,
 };
 
 export const DEFAULT_SETTINGS: CodexForObsidianSettings = {
-  settingsVersion: 26,
+  settingsVersion: 27,
   settingsLanguage: "zh-CN",
   settingsTab: "general",
-  agentBackend: "codex-cli",
-  cliPath: "",
+  agentBackend: "opencode",
   proxyEnabled: false,
   proxyUrl: "http://127.0.0.1:7890",
-  providerMode: "codex-login",
+  providerMode: "custom-api",
   activeApiProviderId: "",
   apiProviders: [],
   mcpEnabled: false,
@@ -465,7 +463,7 @@ export const DEFAULT_SETTINGS: CodexForObsidianSettings = {
   knowledgeBase: {
     enabled: false,
     sessionId: "",
-    backend: "default",
+    backend: "opencode",
     useCustomRulesFile: true,
     rulesFilePath: DEFAULT_KNOWLEDGE_BASE_RULES_FILE,
     scheduleEnabled: false,
@@ -535,8 +533,8 @@ export function normalizeSettingsData(data: any): { settings: CodexForObsidianSe
     ...data,
     settingsLanguage: normalizedLanguage,
     settingsTab: normalizeSettingsTab(data?.settingsTab),
-    agentBackend: normalizeAgentBackendMode(data?.agentBackend),
-    providerMode: normalizeProviderMode(data?.providerMode),
+    agentBackend: "opencode",
+    providerMode: "custom-api",
     activeApiProviderId: typeof data?.activeApiProviderId === "string" ? data.activeApiProviderId.trim() : "",
     apiProviders: normalizeApiProviders(data?.apiProviders),
     setup: normalizeSetupSettings(data?.setup),
@@ -616,7 +614,7 @@ export function validateApiProvider(provider: Pick<ApiProviderConfig, "name" | "
   return errors;
 }
 
-export function removeApiProvider(settings: Pick<CodexForObsidianSettings, "providerMode" | "activeApiProviderId" | "apiProviders">, providerId: string): boolean {
+export function removeApiProvider(settings: Pick<CodexForObsidianSettings, "activeApiProviderId" | "apiProviders">, providerId: string): boolean {
   const index = settings.apiProviders.findIndex((provider) => provider.id === providerId);
   if (index < 0) return false;
   const wasActive = settings.activeApiProviderId === providerId;
@@ -624,7 +622,6 @@ export function removeApiProvider(settings: Pick<CodexForObsidianSettings, "prov
   if (wasActive) {
     const next = settings.apiProviders[Math.min(index, settings.apiProviders.length - 1)];
     settings.activeApiProviderId = next?.id ?? "";
-    if (!next) settings.providerMode = "codex-login";
   }
   return true;
 }
@@ -685,8 +682,7 @@ export function clearLegacyChatWorkspaceDefaults(
   return changed;
 }
 
-export function providerConnectionLabel(settings: Pick<CodexForObsidianSettings, "providerMode" | "activeApiProviderId" | "apiProviders">, language: SettingsLanguage = "zh-CN"): string {
-  if (settings.providerMode !== "custom-api") return language === "en" ? "Codex login" : "Codex 登录态";
+export function providerConnectionLabel(settings: Pick<CodexForObsidianSettings, "activeApiProviderId" | "apiProviders">, language: SettingsLanguage = "zh-CN"): string {
   const provider = getActiveApiProvider(settings);
   if (!provider) return language === "en" ? "Custom API not configured" : "自定义 API 未配置";
   return language === "en" ? `Custom API: ${provider.name} · ${providerModelLabel(provider, language)}` : `自定义 API：${provider.name} · ${providerModelLabel(provider, language)}`;
@@ -938,15 +934,15 @@ export function normalizeSettingsLanguage(value: any): SettingsLanguage {
 }
 
 function normalizeProviderMode(value: any): ProviderMode {
-  return value === "custom-api" ? "custom-api" : DEFAULT_SETTINGS.providerMode;
+  return "custom-api";
 }
 
 function normalizeAgentBackendMode(value: any): AgentBackendMode {
-  return value === "opencode" ? "opencode" : DEFAULT_SETTINGS.agentBackend;
+  return "opencode";
 }
 
 function normalizeKnowledgeBaseBackendMode(value: any): KnowledgeBaseBackendMode {
-  return value === "codex-cli" || value === "opencode" ? value : "default";
+  return "opencode";
 }
 
 function normalizeKnowledgeBaseRunStatus(value: any): KnowledgeBaseRunStatus {
@@ -1011,7 +1007,7 @@ function normalizeKnowledgeBaseSettings(value: any): KnowledgeBaseSettings {
   return {
     enabled: value?.enabled === true,
     sessionId: normalizeOptionalText(value?.sessionId),
-    backend: normalizeKnowledgeBaseBackendMode(value?.backend),
+    backend: "opencode",
     useCustomRulesFile: value?.useCustomRulesFile === true,
     rulesFilePath: normalizeKnowledgeBaseRulesPath(value?.rulesFilePath, fallback.rulesFilePath),
     scheduleEnabled: value?.scheduleEnabled === true,

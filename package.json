@@ -1,7 +1,7 @@
 {
-  "name": "codex-echoink",
+  "name": "xiao-yuan",
   "version": "0.6.0",
-  "description": "Codex EchoInk",
+  "description": "小元 - 使用 OpenCode 的 Obsidian 助手插件",
   "main": "dist/main.js",
   "scripts": {
     "build": "node esbuild.config.mjs production",
@@ -13,9 +13,11 @@
   },
   "keywords": [
     "obsidian",
-    "codex"
+    "opencode",
+    "ai",
+    "小元"
   ],
-  "author": "AKin-lvyifang",
+  "author": "ziwensite",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.15.3",

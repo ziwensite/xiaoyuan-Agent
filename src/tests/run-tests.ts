@@ -81,7 +81,7 @@ import {
   requiredModalityForMime,
   resolveOpenCodeCommand
 } from "../core/opencode-models";
-import { SETTINGS_GEAR_ICON_PATHS } from "../ui/codex-icon";
+import { SETTINGS_GEAR_ICON_PATHS } from "../ui/xiaoyuan-icon";
 import { composerIsBusy, composerPrimaryActionForState } from "../ui/composer-state";
 import { buildEditorActionPrompt, buildEditorActionReviewPrompt, buildEditorActionUserInput, resolveEditorActionStyle } from "../editor-actions/prompt";
 import { cleanEditorActionOutput, validateEditorActionCandidateText } from "../editor-actions/output";

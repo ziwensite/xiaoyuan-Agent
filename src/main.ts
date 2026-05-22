@@ -1,14 +1,12 @@
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
-import { CodexService } from "./core/codex-service";
-import { diagnoseCodexError } from "./core/codex-diagnostics";
 import { externalizeLargeMessages, prepareRawMessage, readRawText, writeRawText } from "./core/raw-message-store";
 import { clearLegacyChatWorkspaceDefaults, ensureKnowledgeBaseSession, getActiveApiProvider, normalizeSettingsData, providerConnectionLabel, type ChatMessage, type CodexForObsidianSettings, type ResourceManagementTab } from "./settings/settings";
-import { CodexSettingTab } from "./settings/settings-tab";
+import { XiaoyuanAgentSettingTab } from "./settings/settings-tab";
 import { confirmModal, requestUserInputModal } from "./ui/modals";
-import { CodexView, VIEW_TYPE_CODEX } from "./ui/codex-view";
-import type { CodexServerRequest, CodexSkill, CodexStatusSnapshot } from "./types/app-server";
+import { XiaoyuanView, VIEW_TYPE_XIAOYUAN } from "./ui/xiaoyuan-view";
+import { OpenCodeBackend } from "./core/opencode-backend";
 import { EditorActionController } from "./editor-actions/controller";
 import { AGENTS_RULES_FILE, DEFAULT_KNOWLEDGE_BASE_RULES_FILE } from "./knowledge-base/constants";
 import {
@@ -28,18 +26,25 @@ import { isLintOnlyKnowledgeBaseReport, readKnowledgeBaseReportExcerpt } from ".
 import { ReviewManager } from "./review/manager";
 import { ReviewPreviewView, VIEW_TYPE_REVIEW_PREVIEW } from "./review/preview-view";
 import { isReviewHtmlPath } from "./review/schedule";
+import type { AgentModelInfo, AgentProfileInfo } from "./agent/types";
+
+export interface OpenCodeStatusSnapshot {
+  connected: boolean;
+  accountLabel: string;
+  serverUrl: string;
+  models: AgentModelInfo[];
+  agents: AgentProfileInfo[];
+  errors: string[];
+}
 
 export default class CodexForObsidianPlugin extends Plugin {
   settings!: CodexForObsidianSettings;
-  codex: CodexService | null = null;
-  lastStatus: CodexStatusSnapshot | null = null;
-  private view: CodexView | null = null;
+  lastStatus: OpenCodeStatusSnapshot | null = null;
+  private view: XiaoyuanView | null = null;
   private reviewPreviewView: ReviewPreviewView | null = null;
   private editorActions: EditorActionController | null = null;
   private knowledgeBase: KnowledgeBaseManager | null = null;
   private review: ReviewManager | null = null;
-  private skillsLoadPromise: Promise<CodexSkill[]> | null = null;
-  private connectPromise: Promise<CodexStatusSnapshot> | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private saveQueue: Promise<void> = Promise.resolve();
   private rawWrites = new Set<Promise<void>>();
@@ -47,8 +52,8 @@ export default class CodexForObsidianPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
-    this.registerView(VIEW_TYPE_CODEX, (leaf: WorkspaceLeaf) => {
-      this.view = new CodexView(leaf, this);
+    this.registerView(VIEW_TYPE_XIAOYUAN, (leaf: WorkspaceLeaf) => {
+      this.view = new XiaoyuanView(leaf, this);
       return this.view;
     });
     this.registerView(VIEW_TYPE_REVIEW_PREVIEW, (leaf: WorkspaceLeaf) => {
@@ -56,22 +61,22 @@ export default class CodexForObsidianPlugin extends Plugin {
       return this.reviewPreviewView;
     });
 
-    this.addRibbonIcon("bot", "打开 Codex 侧栏", () => {
+    this.addRibbonIcon("bot", "打开 小元 侧栏", () => {
       void this.activateView();
     });
 
     this.addCommand({
-      id: "open-codex-sidebar",
-      name: "打开 Codex 侧栏",
+      id: "open-xiaoyuan-sidebar",
+      name: "打开 小元 侧栏",
       callback: () => void this.activateView()
     });
 
     this.addCommand({
-      id: "new-codex-chat",
-      name: "新建 Codex 会话",
+      id: "new-xiaoyuan-chat",
+      name: "新建 小元 会话",
       callback: async () => {
         await this.activateView();
-        new Notice("已打开 Codex，可点击 + 新建会话");
+        new Notice("已打开 小元，可点击 + 新建会话");
       }
     });
 
@@ -99,7 +104,7 @@ export default class CodexForObsidianPlugin extends Plugin {
       editorCallback: (editor, view) => void this.editorActions?.runEditorActionById(editor, view, "translate")
     });
 
-    this.addSettingTab(new CodexSettingTab(this));
+    this.addSettingTab(new XiaoyuanAgentSettingTab(this));
     this.editorActions = new EditorActionController(this);
     this.editorActions.register();
     this.knowledgeBase = new KnowledgeBaseManager(this);
@@ -112,7 +117,7 @@ export default class CodexForObsidianPlugin extends Plugin {
     }
     if (this.settings.editorActions.enabled) {
       this.app.workspace.onLayoutReady(() => {
-        window.setTimeout(() => void this.ensureCodexConnected(false, { silent: true }), 800);
+        window.setTimeout(() => void this.ensureOpenCodeConnected(false, { silent: true }), 800);
       });
     }
   }
@@ -122,18 +127,17 @@ export default class CodexForObsidianPlugin extends Plugin {
     this.knowledgeBase?.unload();
     this.review?.unload();
     await this.saveSettings(true);
-    await this.codex?.disconnect();
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_CODEX);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_XIAOYUAN);
   }
 
   async activateView(): Promise<void> {
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CODEX);
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_XIAOYUAN);
     let leaf = leaves[0];
     if (!leaf) {
       const rightLeaf = this.app.workspace.getRightLeaf(false);
-      if (!rightLeaf) throw new Error("无法创建 Codex 右侧栏");
+      if (!rightLeaf) throw new Error("无法创建 小元 右侧栏");
       leaf = rightLeaf;
-      await leaf.setViewState({ type: VIEW_TYPE_CODEX, active: true });
+      await leaf.setViewState({ type: VIEW_TYPE_XIAOYUAN, active: true });
     }
     await this.app.workspace.revealLeaf(leaf);
     this.view?.focusInput();
@@ -151,7 +155,7 @@ export default class CodexForObsidianPlugin extends Plugin {
     this.view?.applySavedComposerDefaults();
   }
 
-  getCodexView(): CodexView | null {
+  getXiaoyuanView(): XiaoyuanView | null {
     return this.view;
   }
 
@@ -168,80 +172,54 @@ export default class CodexForObsidianPlugin extends Plugin {
     setting.openTabById(this.manifest.id);
   }
 
-  async ensureCodexConnected(force = false, options: { silent?: boolean; refreshLogin?: boolean } = {}): Promise<CodexStatusSnapshot> {
-    if (this.codex?.isConnected() && !force && this.lastStatus?.connected) return this.lastStatus;
-    if (this.connectPromise && !force) return this.connectPromise;
-    if (force) {
-      this.connectPromise = null;
-      await this.codex?.disconnect();
-      this.codex = null;
-    }
-    if (!this.codex || force) {
-      this.codex = new CodexService({
-        cliPath: this.settings.cliPath,
-        proxyEnabled: this.settings.proxyEnabled,
-        proxyUrl: this.settings.proxyUrl,
-        providerMode: this.settings.providerMode,
-        activeApiProvider: getActiveApiProvider(this.settings),
-        vaultPath: this.getVaultPath(),
-        onNotification: (notification) => this.handleCodexNotification(notification),
-        onServerRequest: (request) => this.handleServerRequest(request)
-      });
-    }
-    this.connectPromise = (async () => {
-      try {
-        const previousStatus = this.lastStatus;
-        const nextStatus = await this.codex!.connect(force, { refreshLogin: options.refreshLogin === true });
-        this.lastStatus = {
-          ...nextStatus,
-          rateLimits: nextStatus.rateLimits ?? previousStatus?.rateLimits ?? null,
-          rateLimitsByLimitId: nextStatus.rateLimitsByLimitId ?? previousStatus?.rateLimitsByLimitId ?? null
-        };
-      } catch (error) {
-        const diagnostic = diagnoseCodexError(error, {
-          model: this.settings.defaultModel,
-          providerLabel: providerConnectionLabel(this.settings, this.settings.settingsLanguage),
-          proxyEnabled: this.settings.proxyEnabled,
-          proxyUrl: this.settings.proxyUrl,
-          language: this.settings.settingsLanguage
-        });
-        this.lastStatus = {
-          connected: false,
-          accountLabel: this.settings.settingsLanguage === "en" ? "Disconnected" : "未连接",
-          loggedIn: false,
-          models: [],
-          skills: [],
-          mcpServers: [],
-          rateLimits: null,
-          rateLimitsByLimitId: null,
-          errors: [diagnostic.text]
-        };
-        if (!options.silent) {
-          new Notice(this.settings.settingsLanguage === "en" ? `Codex failed: ${diagnostic.title}` : `Codex 连接失败：${diagnostic.title}`);
-        }
-      }
-      return this.lastStatus!;
-    })().finally(() => {
-      this.connectPromise = null;
+  async ensureOpenCodeConnected(force = false, options: { silent?: boolean } = {}): Promise<OpenCodeStatusSnapshot> {
+    if (this.lastStatus?.connected && !force) return this.lastStatus;
+
+    this.lastStatus = {
+      connected: false,
+      accountLabel: this.settings.settingsLanguage === "en" ? "Disconnected" : "未连接",
+      serverUrl: "",
+      models: [],
+      agents: [],
+      errors: []
+    };
+
+    const backend = new OpenCodeBackend({
+      ...this.settings.opencode,
+      vaultPath: this.getVaultPath()
     });
-    return this.connectPromise;
-  }
 
-  async ensureSkillsLoaded(force = false): Promise<CodexSkill[]> {
-    if (!force && this.lastStatus?.skills.length) return this.lastStatus.skills;
-    if (!this.skillsLoadPromise) {
-      this.skillsLoadPromise = this.loadSkills(force).finally(() => {
-        this.skillsLoadPromise = null;
-      });
+    try {
+      await backend.connect();
+      const [models, agents] = await Promise.all([
+        backend.listModels(),
+        backend.listAgents()
+      ]);
+      const info = backend.getConnectionInfo();
+      this.lastStatus = {
+        connected: true,
+        accountLabel: this.settings.settingsLanguage === "en" ? "Connected" : "已连接",
+        serverUrl: info.serverUrl,
+        models,
+        agents,
+        errors: []
+      };
+      this.settings.opencode.lastConnectedAt = Date.now();
+      this.settings.opencode.lastError = "";
+      await this.saveSettings(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.lastStatus.errors = [message];
+      this.settings.opencode.lastError = message;
+      await this.saveSettings(true);
+      if (!options.silent) {
+        new Notice(this.settings.settingsLanguage === "en" ? `OpenCode connection failed: ${message}` : `OpenCode 连接失败：${message}`);
+      }
+    } finally {
+      await backend.disconnect();
     }
-    return this.skillsLoadPromise;
-  }
 
-  async reconnectCodex(options: { refreshLogin?: boolean } = {}): Promise<CodexStatusSnapshot> {
-    this.connectPromise = null;
-    await this.codex?.disconnect();
-    this.codex = null;
-    return this.ensureCodexConnected(true, { refreshLogin: options.refreshLogin === true });
+    return this.lastStatus;
   }
 
   getVaultPath(): string {
@@ -270,12 +248,12 @@ export default class CodexForObsidianPlugin extends Plugin {
     try {
       rawMigrated = await externalizeLargeMessages(this.getVaultPath(), this.settings, this.getPluginDataDirName());
     } catch (error) {
-      console.error("Codex raw message migration failed", error);
+      console.error("OpenCode raw message migration failed", error);
     }
     try {
       historyMigrated = (await migrateKnowledgeBaseHistory(this.getVaultPath(), this.getPluginDataDirName(), this.settings)).changed;
     } catch (error) {
-      console.error("Codex knowledge history migration failed", error);
+      console.error("OpenCode knowledge history migration failed", error);
     }
     const knowledgeSessionChanged = sessionCountBefore !== this.settings.sessions.length || knowledgeSessionBefore !== this.settings.knowledgeBase.sessionId;
     if (normalized.changed || rawMigrated > 0 || historyMigrated || legacyChatWorkspacesCleared > 0 || knowledgeSessionChanged || knowledgeStatusRecovered || knowledgeRulesMigrated) await this.saveSettings(true);
@@ -326,7 +304,7 @@ export default class CodexForObsidianPlugin extends Plugin {
     let tracked: Promise<void>;
     tracked = writeRawText(this.getVaultPath(), write.rawRef, write.text, this.getPluginDataDirName())
       .catch((error) => {
-        console.error("Codex raw message write failed", error);
+        console.error("OpenCode raw message write failed", error);
         if (message.rawRef === write.rawRef) {
           message.text = fullText;
           delete message.previewText;
@@ -380,7 +358,7 @@ export default class CodexForObsidianPlugin extends Plugin {
   async openReviewHtmlPreview(relativePath: string): Promise<void> {
     const normalized = relativePath.replace(/\\/g, "/");
     if (!isReviewHtmlPath(normalized, this.settings.review.outputDir)) {
-      new Notice("只能打开 EchoInk 生成的复盘 HTML");
+      new Notice("只能打开 小元 生成的复盘 HTML");
       return;
     }
     let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW_PREVIEW)[0];
@@ -401,16 +379,12 @@ export default class CodexForObsidianPlugin extends Plugin {
     if (!report || !isLintOnlyKnowledgeBaseReport(report)) return false;
     settings.lastRunStatus = "success";
     settings.lastError = "";
-    settings.lastSummary = `体检报告已生成。上次 Codex 返回失败状态，但 lint-only 报告文件存在，已恢复为成功。\n\n${report}`.slice(0, 1000);
+    settings.lastSummary = `体检报告已生成。上次 OpenCode 返回失败状态，但 lint-only 报告文件存在，已恢复为成功。\n\n${report}`.slice(0, 1000);
     return true;
   }
 
-  private handleCodexNotification(notification: any): void {
-    if (this.knowledgeBase?.handleCodexNotification(notification)) {
-      this.view?.handleCodexNotification(notification);
-      return;
-    }
-    this.view?.handleCodexNotification(notification);
+  private handleOpenCodeNotification(notification: any): void {
+    this.view?.handleOpenCodeNotification(notification);
   }
 
   private async flushSettingsSave(): Promise<void> {
@@ -432,59 +406,7 @@ export default class CodexForObsidianPlugin extends Plugin {
     try {
       await persistAndCompactKnowledgeBaseHistory(this.getVaultPath(), this.getPluginDataDirName(), this.settings);
     } catch (error) {
-      console.error("Codex knowledge history save failed", error);
+      console.error("OpenCode knowledge history save failed", error);
     }
-  }
-
-  private async loadSkills(force: boolean): Promise<CodexSkill[]> {
-    const status = await this.ensureCodexConnected(force);
-    if (!status.connected || !this.codex) return status.skills;
-    try {
-      const skills = await this.codex.refreshSkills();
-      this.lastStatus = { ...status, skills };
-      return skills;
-    } catch (error) {
-      this.lastStatus = {
-        ...status,
-        errors: [...status.errors, error instanceof Error ? error.message : String(error)]
-      };
-      return status.skills;
-    }
-  }
-
-  private async handleServerRequest(request: CodexServerRequest): Promise<any> {
-    if (request.method === "item/commandExecution/requestApproval") {
-      const command = request.params?.command ?? "未知命令";
-      const accepted = await confirmModal(this.app, "Codex 请求执行命令", `${command}\n\n${request.params?.reason ?? ""}`);
-      return { decision: accepted ? "accept" : "decline" };
-    }
-    if (request.method === "item/fileChange/requestApproval") {
-      const accepted = await confirmModal(this.app, "Codex 请求修改文件", request.params?.reason ?? "是否允许本次文件修改？");
-      return { decision: accepted ? "accept" : "decline" };
-    }
-    if (request.method === "item/permissions/requestApproval") {
-      const accepted = await confirmModal(this.app, "Codex 请求额外权限", request.params?.reason ?? "是否允许本次额外权限？");
-      return accepted
-        ? {
-            permissions: request.params?.permissions ?? {},
-            scope: "turn"
-          }
-        : { permissions: {}, scope: "turn" };
-    }
-    if (request.method === "item/tool/requestUserInput") {
-      const answers = await requestUserInputModal(this.app, request.params?.questions ?? []);
-      return { answers };
-    }
-    if (request.method === "mcpServer/elicitation/request") {
-      const params = request.params ?? {};
-      if (params.mode === "url") {
-        const accepted = await confirmModal(this.app, "MCP 需要网页登录", `${params.message}\n\n${params.url}`, "打开", "取消");
-        if (accepted) window.open(params.url);
-        return { action: accepted ? "accept" : "cancel", content: null, _meta: null };
-      }
-      const accepted = await confirmModal(this.app, `MCP：${params.serverName}`, params.message ?? "是否继续？");
-      return { action: accepted ? "accept" : "decline", content: {}, _meta: null };
-    }
-    return {};
   }
 }

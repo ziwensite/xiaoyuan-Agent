@@ -39,8 +39,8 @@ export class EditorActionController {
     if (!this.active) return false;
     setEditorActionCandidate(this.active.editor, null);
     this.active = null;
-    this.plugin.getCodexView()?.setEditorActionStatus({ status, message: message ?? (status === "failed" ? "候选已失效" : "已取消") });
-    if (showNotice) new Notice("已取消 Codex 候选");
+    this.plugin.getXiaoyuanView()?.setEditorActionStatus({ status, message: message ?? (status === "failed" ? "候选已失效" : "已取消") });
+    if (showNotice) new Notice("已取消候选");
     return true;
   }
 
@@ -60,7 +60,7 @@ export class EditorActionController {
     for (const action of actions) {
       menu.addItem((item) => {
         item
-          .setTitle(`Codex：${action.label}`)
+          .setTitle(`${action.label}`)
           .setIcon(actionIcon(action.id))
           .onClick(() => void this.runEditorAction(editor, info, action));
       });
@@ -123,9 +123,9 @@ export class EditorActionController {
 
     this.cancelActiveCandidate("canceled", false);
     await this.plugin.activateView();
-    const view = this.plugin.getCodexView();
+    const view = this.plugin.getXiaoyuanView();
     if (!view) {
-      new Notice("无法打开 Codex 侧栏");
+      new Notice("无法打开 小元 侧栏");
       return;
     }
 
@@ -152,14 +152,14 @@ export class EditorActionController {
       editor.focus();
     } catch (error) {
       view.setEditorActionStatus({ status: "failed", actionLabel: action.label, error: error instanceof Error ? error.message : String(error) });
-      new Notice(`Codex ${action.label}失败：${error instanceof Error ? error.message : String(error)}`);
+      new Notice(`${action.label}失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   runEditorActionById(editor: Editor, info: MarkdownView | MarkdownFileInfo, actionId: string): Promise<void> {
     const action = enabledEditorActionConfigs(this.plugin.settings.editorActions).find((item) => item.id === actionId);
     if (!action) {
-      new Notice("这个 Codex 写作操作未启用");
+      new Notice("这个写作操作未启用");
       return Promise.resolve();
     }
     return this.runEditorAction(editor, info, action);
@@ -181,7 +181,7 @@ export class EditorActionController {
       editor.replaceRange(candidate.candidateText, editor.offsetToPos(range.fromOffset), editor.offsetToPos(range.toOffset), "codex-editor-action");
       this.active = null;
       const message = confirmedActionMessage(candidate.actionId);
-      this.plugin.getCodexView()?.setEditorActionStatus({ status: "confirmed", message });
+      this.plugin.getXiaoyuanView()?.setEditorActionStatus({ status: "confirmed", message });
       new Notice(confirmedActionNotice(candidate.actionId));
     } finally {
       this.confirming = false;
@@ -204,7 +204,7 @@ function confirmedActionMessage(actionId: string): string {
 }
 
 function confirmedActionNotice(actionId: string): string {
-  if (actionId === "continue") return "已插入 Codex 续写";
+  if (actionId === "continue") return "已插入续写";
   if (actionId === "translate") return "已替换为英文译文";
-  return "已替换为 Codex 候选";
+  return "已替换";
 }

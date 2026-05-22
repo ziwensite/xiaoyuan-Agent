@@ -5,15 +5,12 @@ import { execFile } from "child_process";
 import { Notice, normalizePath, requestUrl, TFile } from "obsidian";
 import type CodexForObsidianPlugin from "../main";
 import type { AgentInputModality, AgentModelInfo, AgentPromptPart } from "../agent/types";
-import { diagnoseCodexError } from "../core/codex-diagnostics";
 import { OpenCodeBackend } from "../core/opencode-backend";
 import { ensureOpenCodeModelSupportsFiles, requiredModalityForMime } from "../core/opencode-models";
-import { ensureKnowledgeBaseSession, newId, providerConnectionLabel, recordKnowledgeBaseMaintenanceRun, type ChatMessage, type KnowledgeBaseProcessedSource, type ReviewReportKind, type StoredAttachment } from "../settings/settings";
-import type { CodexNotification, PermissionMode, UserInput } from "../types/app-server";
+import { ensureKnowledgeBaseSession, newId, recordKnowledgeBaseMaintenanceRun, type ChatMessage, type KnowledgeBaseProcessedSource, type ReviewReportKind, type StoredAttachment } from "../settings/settings";
+import type { PermissionMode } from "../types/app-server";
 import { knowledgeBaseHelpText, parseKnowledgeBaseCommand } from "./commands";
 import { AGENTS_RULES_FILE } from "./constants";
-import { extractKnowledgeBaseNotificationIds, routeKnowledgeBaseCodexNotification } from "./codex-route";
-import { formatKnowledgeBaseCodexFailureSignal } from "./failure";
 import { readKnowledgeBaseReportExcerpt, recoveredLintReportSummary } from "./report";
 import { SUPPORTED_RAW_EXTENSIONS, discoverKnowledgeBaseSources } from "./discovery";
 import { buildKnowledgeBaseDashboardSnapshot, type KnowledgeBaseDashboardSnapshot } from "./dashboard";
@@ -25,18 +22,7 @@ import { diffRawSnapshot, snapshotRawFiles } from "./raw-integrity";
 import { shouldRunScheduledKnowledgeBaseMaintenance } from "./schedule";
 import { buildScheduledKnowledgeBaseMessage } from "./scheduled-message";
 import { normalizeKnowledgeBaseStructure, rewriteKnowledgeBaseRelativePath } from "./structure-normalizer";
-import { buildCodexKnowledgeTurnOptions } from "./turn-options";
 import type { KnowledgeBaseCitationSummary, KnowledgeBaseDiscovery, KnowledgeBaseRunMode, KnowledgeBaseRunResult, KnowledgeBaseSource, StructureNormalizationPathRewrite, StructureNormalizationResult } from "./types";
-
-type CodexKbWaiter = {
-  threadId: string;
-  turnId: string;
-  itemIds: Set<string>;
-  text: string;
-  resolve: (text: string) => void;
-  reject: (error: Error) => void;
-  model: string;
-};
 
 export interface KnowledgeBaseChatResult {
   status: "success" | "failed";
@@ -53,8 +39,6 @@ export class KnowledgeBaseManager {
   private running = false;
   private scheduleTimer: number | null = null;
   private schedulerStartedAt = 0;
-  private codexWaiter: CodexKbWaiter | null = null;
-  private activeCodexRun: { threadId: string; turnId: string } | null = null;
   private activeOpenCode: { backend: OpenCodeBackend; sessionId: string } | null = null;
 
   constructor(private readonly plugin: CodexForObsidianPlugin) {}
@@ -65,7 +49,7 @@ export class KnowledgeBaseManager {
       name: "知识库：初始化 LLM Wiki",
       callback: async () => {
         await this.plugin.activateKnowledgeBaseChannel();
-        this.plugin.getCodexView()?.fillKnowledgeBaseCommand("/init ");
+        this.plugin.getXiaoyuanView()?.fillKnowledgeBaseCommand("/init ");
       }
     });
     this.plugin.addCommand({
@@ -111,11 +95,6 @@ export class KnowledgeBaseManager {
       window.clearInterval(this.scheduleTimer);
       this.scheduleTimer = null;
     }
-    if (this.codexWaiter) {
-      this.codexWaiter.reject(new Error("知识库任务已取消"));
-      this.codexWaiter = null;
-    }
-    this.activeCodexRun = null;
     this.activeOpenCode = null;
   }
 
@@ -128,23 +107,14 @@ export class KnowledgeBaseManager {
   }
 
   async cancelMaintenance(): Promise<void> {
-    const codexRun = this.activeCodexRun;
     const openCodeRun = this.activeOpenCode;
-    if (!this.running && !this.codexWaiter && !codexRun && !openCodeRun) {
+    if (!this.running && !openCodeRun) {
       new Notice("当前没有知识库任务");
       return;
-    }
-    if (this.codexWaiter) {
-      this.codexWaiter.reject(new Error("知识库任务已取消"));
-      this.codexWaiter = null;
-    }
-    if (codexRun?.threadId && codexRun.turnId && this.plugin.codex) {
-      await this.plugin.codex.interruptTurn(codexRun.threadId, codexRun.turnId).catch(() => undefined);
     }
     if (openCodeRun?.sessionId) {
       await openCodeRun.backend.abort(openCodeRun.sessionId).catch(() => undefined);
     }
-    this.activeCodexRun = null;
     this.activeOpenCode = null;
     this.running = false;
     this.plugin.settings.knowledgeBase.lastRunStatus = "canceled";
@@ -352,11 +322,8 @@ export class KnowledgeBaseManager {
         hasTracker: await exists(discovery.trackerPath)
       });
 
-      const backend = this.resolveKnowledgeBackend();
       const sources = promptSources.slice(0, MAX_ATTACHED_SOURCES);
-      const output = backend === "opencode"
-        ? await this.runOpenCodeKnowledgeTask(prompt, sources)
-        : await this.runCodexKnowledgeTask(prompt, sources, "workspace-write", "knowledge-base");
+      const output = await this.runOpenCodeKnowledgeTask(prompt, sources, "workspace-write");
 
       const structure = mode === "maintain"
         ? await normalizeKnowledgeBaseStructure(vaultPath, { lastReportPath: settings.lastReportPath || discovery.reportPath })
@@ -448,7 +415,7 @@ export class KnowledgeBaseManager {
       this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
-      this.plugin.getCodexView()?.refreshKnowledgeBaseDashboard();
+      this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
     }
   }
 
@@ -473,10 +440,7 @@ export class KnowledgeBaseManager {
         useCustomRulesFile: rules.useCustomRulesFile,
         matches
       });
-      const backend = this.resolveKnowledgeBackend();
-      const output = backend === "opencode"
-        ? await this.runOpenCodeKnowledgeTask(prompt, matches, "read-only")
-        : await this.runCodexKnowledgeTask(prompt, matches, "read-only", "knowledge-base");
+      const output = await this.runOpenCodeKnowledgeTask(prompt, matches, "read-only");
       return {
         status: "success",
         message: formatAskAnswer(output, citations),
@@ -491,7 +455,7 @@ export class KnowledgeBaseManager {
       this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
-      this.plugin.getCodexView()?.refreshKnowledgeBaseDashboard();
+      this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
     }
   }
 
@@ -504,10 +468,9 @@ export class KnowledgeBaseManager {
       const vaultPath = this.plugin.getVaultPath();
       const copiedAttachments = await this.copyAttachmentsToRaw(attachments);
       const request = stripJournalPrefix(text).trim() || "写日记";
-      const backend = this.resolveKnowledgeBackend();
       const target = await resolveJournalDailyTarget(vaultPath, text);
       await ensureJournalTargetFolders(vaultPath, target);
-      const openCodeHistory = backend === "opencode" ? await this.collectOpenCodeJournalHistory(target) : null;
+      const openCodeHistory = await this.collectOpenCodeJournalHistory(target);
       const prompt = buildKnowledgeBaseJournalPrompt({
         vaultPath,
         userRequest: copiedAttachments.length
@@ -519,12 +482,10 @@ export class KnowledgeBaseManager {
           ].join("\n")
           : request,
         target,
-        backend,
+        backend: "opencode",
         openCodeHistory
       });
-      const output = backend === "opencode"
-        ? await this.runOpenCodeKnowledgeTask(prompt, [], "workspace-write")
-        : await this.runCodexKnowledgeTask(prompt, [], "workspace-write", "journal");
+      const output = await this.runOpenCodeKnowledgeTask(prompt, [], "workspace-write");
       if (!await exists(target.absolutePath)) {
         throw new Error(`日记任务结束，但未找到目标文件：${target.relativePath}${output.trim() ? `\n\nAgent 输出：${output.trim().slice(0, 800)}` : ""}`);
       }
@@ -541,7 +502,7 @@ export class KnowledgeBaseManager {
       this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
-      this.plugin.getCodexView()?.refreshKnowledgeBaseDashboard();
+      this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
     }
   }
 
@@ -566,75 +527,6 @@ export class KnowledgeBaseManager {
     } finally {
       await backend.disconnect();
     }
-  }
-
-  handleCodexNotification(notification: CodexNotification): boolean {
-    const waiter = this.codexWaiter;
-    if (!waiter) return false;
-    const { method, params } = notification;
-    const ids = extractKnowledgeBaseNotificationIds(params);
-    const route = routeKnowledgeBaseCodexNotification(method, params, {
-      threadId: waiter.threadId,
-      turnId: waiter.turnId,
-      itemIds: waiter.itemIds
-    });
-    if (!route.swallow) return false;
-    if (method === "turn/started" && ids.turnId) waiter.turnId = ids.turnId;
-    if (route.rememberItemId) waiter.itemIds.add(route.rememberItemId);
-    if (ids.itemId && ids.turnId && ids.turnId === waiter.turnId) waiter.itemIds.add(ids.itemId);
-    if (route.collectAssistantDelta) waiter.text += params?.delta ?? "";
-    if (method === "turn/completed") {
-      this.codexWaiter = null;
-      if (params?.turn?.status === "failed") {
-        waiter.reject(new Error(this.formatCodexDiagnostic(formatKnowledgeBaseCodexFailureSignal(method, params, "Codex 知识库任务失败"), waiter.model)));
-      }
-      else waiter.resolve(waiter.text);
-    }
-    if (method === "error") {
-      this.codexWaiter = null;
-      waiter.reject(new Error(this.formatCodexDiagnostic(formatKnowledgeBaseCodexFailureSignal(method, params, "Codex 知识库任务失败"), waiter.model)));
-    }
-    return true;
-  }
-
-  private async runCodexKnowledgeTask(
-    prompt: string,
-    sources: KnowledgeBaseSource[],
-    permission: PermissionMode = "workspace-write",
-    writeScope: "knowledge-base" | "journal" = "knowledge-base"
-  ): Promise<string> {
-    let status = await this.plugin.ensureCodexConnected(false, { silent: true });
-    if (!status.connected) {
-      status = await this.plugin.ensureCodexConnected(true, { silent: true }).catch(() => status);
-    }
-    if (!status.connected || !this.plugin.codex) throw new Error(this.formatCodexDiagnostic(status.errors[0] || "Codex 未连接", this.plugin.settings.defaultModel));
-    const options = buildCodexKnowledgeTurnOptions({
-      settings: this.plugin.settings,
-      availableModels: status.models,
-      vaultPath: this.plugin.getVaultPath(),
-      permission,
-      writeScope
-    });
-    let started: { threadId: string; title: string };
-    try {
-      started = await this.plugin.codex.startThread(options);
-    } catch (error) {
-      status = await this.plugin.ensureCodexConnected(true, { silent: true }).catch(() => status);
-      if (!status.connected || !this.plugin.codex) throw error;
-      started = await this.plugin.codex.startThread(options);
-    }
-    const result = new Promise<string>((resolve, reject) => {
-      this.codexWaiter = { threadId: started.threadId, turnId: "", itemIds: new Set<string>(), text: "", resolve, reject, model: options.model };
-    });
-    try {
-      const turnId = await this.plugin.codex.startTurn(started.threadId, buildCodexKnowledgeInput(prompt, sources), options);
-      this.activeCodexRun = { threadId: started.threadId, turnId };
-      if (this.codexWaiter) this.codexWaiter.turnId = turnId;
-    } catch (error) {
-      this.codexWaiter = null;
-      throw error;
-    }
-    return result;
   }
 
   private async runOpenCodeKnowledgeTask(prompt: string, sources: KnowledgeBaseSource[], permission: PermissionMode = "workspace-write"): Promise<string> {
@@ -686,30 +578,15 @@ export class KnowledgeBaseManager {
     }
   }
 
-  private resolveKnowledgeBackend(): "codex-cli" | "opencode" {
-    const configured = this.plugin.settings.knowledgeBase.backend;
-    return configured === "default" ? this.plugin.settings.agentBackend : configured;
-  }
-
   private formatFailureContext(reportPath = ""): string {
-    const backend = this.resolveKnowledgeBackend();
     const opencode = this.plugin.settings.opencode;
     const kb = this.plugin.settings.knowledgeBase;
     return [
-      `后端：${backend}`,
-      backend === "opencode" && opencode.providerId && opencode.modelId ? `模型：${opencode.providerId}/${opencode.modelId}` : "",
+      `后端：opencode`,
+      opencode.providerId && opencode.modelId ? `模型：${opencode.providerId}/${opencode.modelId}` : "",
       `规则文件：${kb.useCustomRulesFile ? kb.rulesFilePath : AGENTS_RULES_FILE}`,
       reportPath ? `报告：${reportPath}` : ""
     ].filter(Boolean).join("\n");
-  }
-
-  private formatCodexDiagnostic(error: unknown, model: string): string {
-    return diagnoseCodexError(error, {
-      model,
-      providerLabel: providerConnectionLabel(this.plugin.settings),
-      proxyEnabled: this.plugin.settings.proxyEnabled,
-      proxyUrl: this.plugin.settings.proxyUrl
-    }).text;
   }
 
   private async resolveRulesFile(): Promise<{ relativePath: string; absolutePath: string; exists: boolean; useCustomRulesFile: boolean }> {
@@ -763,7 +640,7 @@ export class KnowledgeBaseManager {
     session.title = "知识库管理";
     session.updatedAt = message.createdAt;
     await this.plugin.saveSettings(true);
-    this.plugin.getCodexView()?.refreshAfterBackgroundKnowledgeMessage();
+    this.plugin.getXiaoyuanView()?.refreshAfterBackgroundKnowledgeMessage();
   }
 
   async captureText(target: "inbox" | "raw-articles"): Promise<void> {

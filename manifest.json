@@ -1,9 +1,9 @@
 {
-  "id": "codex-echoink",
-  "name": "Codex EchoInk",
+  "id": "xiaoyuan-agent",
+  "name": "小元",
   "version": "0.6.0",
   "minAppVersion": "1.4.5",
-  "description": "Use Codex CLI or OpenCode to manage knowledge, ask vault questions, and review local agent work.",
-  "author": "AKin-lvyifang",
+  "description": "使用 OpenCode 管理知识库、回答仓库问题、协助写作的 Obsidian 助手插件。",
+  "author": "ziwensite",
   "isDesktopOnly": true
 }

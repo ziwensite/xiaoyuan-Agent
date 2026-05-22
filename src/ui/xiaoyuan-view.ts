@@ -3,9 +3,8 @@ import * as path from "path";
 import { ItemView, MarkdownView, Menu, Modal, normalizePath, Notice, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import type CodexForObsidianPlugin from "../main";
 import type { ChatMessage, DiffSummary, StoredAttachment, StoredSession } from "../settings/settings";
-import { DEFAULT_SETTINGS, ensureKnowledgeBaseSession, ensureModelChoices, filterEnabledSkills, getActiveApiProvider, getApiProviderModels, isKnowledgeBaseSession, newId, providerConnectionLabel, resolveEditorActionModeConfig } from "../settings/settings";
+import { DEFAULT_SETTINGS, ensureKnowledgeBaseSession, filterEnabledSkills, getActiveApiProvider, getApiProviderModels, isKnowledgeBaseSession, newId, providerConnectionLabel, resolveEditorActionModeConfig } from "../settings/settings";
 import type {
-  CodexNotification,
   CodexSkill,
   McpServerStatus,
   PermissionMode,
@@ -18,13 +17,12 @@ import type {
 } from "../types/app-server";
 import { extractClipboardImageFiles, saveClipboardImageAttachments } from "../core/clipboard-images";
 import { buildDiffSummary, diffSummaryLabel, parseFileChangeDiff, serializeFileChanges, type ParsedDiffFile } from "../core/diff-summary";
-import { diagnoseCodexError, type CodexErrorDiagnostic } from "../core/codex-diagnostics";
 import { basename, buildUserInput, contextUsageView, filterSkills, getSlashQuery, normalizeProcessFileRef, processGroupStateId, reasoningTextFromPayload, summarizeProcessEvent } from "../core/mapping";
 import { settleStaleRunningMessages } from "../core/message-state";
 import { formatRateLimitUsage, normalizeRateLimitResponse, type RateLimitWindowView } from "../core/rate-limits";
 import { displayTextForMessage, isLargeRawMessage } from "../core/raw-message-store";
 import { calculateVirtualWindow, isNearVirtualBottom, scrollTopForVirtualBottom } from "../core/virtual-window";
-import { renderSettingsGearIcon } from "./codex-icon";
+import { renderSettingsGearIcon } from "./xiaoyuan-icon";
 import { composerIsBusy, composerPrimaryActionForState } from "./composer-state";
 import { openImageOverlay, renderRichText } from "./render-message";
 import { CHAT_TURN_WATCHDOG_MS, turnWatchdogTimeoutForSession, turnWatchdogTimeoutText } from "./turn-watchdog";
@@ -41,7 +39,7 @@ import type { KnowledgeBaseHistoryDaySummary } from "../knowledge-base/history-s
 import { clearKnowledgeBaseVisibleHistory, getHiddenKnowledgeBaseMessages, getVisibleKnowledgeBaseMessages } from "../knowledge-base/session-history";
 import type { KnowledgeBaseCitation, KnowledgeBaseCitationBucket, KnowledgeBaseCitationSummary } from "../knowledge-base/types";
 
-export const VIEW_TYPE_CODEX = "codex-for-obsidian-view";
+export const VIEW_TYPE_XIAOYUAN = "xiaoyuan-agent-view";
 
 type MessageRenderRow =
   | { id: string; kind: "message"; message: ChatMessage }
@@ -69,7 +67,7 @@ interface ArticleUnderstandingPanelState {
   error?: string;
 }
 
-export class CodexView extends ItemView {
+export class XiaoyuanView extends ItemView {
   private rootEl!: HTMLElement;
   private headerStatusEl!: HTMLElement;
   private headerStatusTextEl!: HTMLElement;
@@ -162,7 +160,7 @@ export class CodexView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Codex";
+    return "小元";
   }
 
   getIcon(): string {
@@ -171,14 +169,12 @@ export class CodexView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.render();
-    await this.plugin.ensureCodexConnected();
+    await this.plugin.ensureOpenCodeConnected();
     this.applyStatus();
     this.renderTabs();
     this.renderMessages({ forceBottom: true });
     this.renderKnowledgeDashboard();
     void this.refreshKnowledgeDashboard();
-    this.prewarmActiveThread();
-    this.prewarmEditorActionThread();
     void this.refreshHeaderRateLimits();
   }
 
@@ -460,7 +456,7 @@ export class CodexView extends ItemView {
     const title = header.createDiv({ cls: "codex-title" });
     const icon = title.createSpan({ cls: "codex-title-icon codex-title-icon-codex", attr: { "aria-hidden": "true" } });
     setIcon(icon, "bot");
-    title.createSpan({ cls: "codex-title-text", text: "EchoInk" });
+    title.createSpan({ cls: "codex-title-text", text: "小元" });
     const headerActions = header.createDiv({ cls: "codex-header-actions" });
     this.editorActionStatusEl = headerActions.createDiv({
       cls: "codex-status-chip codex-editor-action-status is-idle",
@@ -502,7 +498,7 @@ export class CodexView extends ItemView {
 
     this.headerUsageEl = headerActions.createEl("button", {
       cls: "codex-status-chip codex-usage-chip",
-      attr: { type: "button", "aria-label": "Codex 用量", title: "Codex 用量" }
+      attr: { type: "button", "aria-label": "用量", title: "用量" }
     });
     const usageIcon = this.headerUsageEl.createSpan({ cls: "codex-header-status-icon" });
     setIcon(usageIcon, "gauge");
@@ -544,7 +540,7 @@ export class CodexView extends ItemView {
     this.attachmentsEl = inputWrap.createDiv({ cls: "codex-attachments" });
     this.inputEl = inputWrap.createEl("textarea", {
       cls: "codex-input",
-      attr: { placeholder: "问 Codex，让它管理当前 Obsidian 仓库" }
+      attr: { placeholder: "问 小元，让它管理当前 Obsidian 仓库" }
     });
     this.inputEl.addEventListener("input", () => this.onInputChanged());
     this.inputEl.addEventListener("paste", (event) => {
@@ -581,7 +577,7 @@ export class CodexView extends ItemView {
     const session = this.ensureSession();
     this.inputEl.setAttr("placeholder", this.isKnowledgeBaseSession(session)
       ? "普通对话直接输入；查知识库用 /ask；管理用 /check /maintain"
-      : session.cwd ? `问 Codex，当前工作区：${workspaceDisplayName(session.cwd)}` : "先选择工作区，再问 Codex");
+      : session.cwd ? `问 小元，当前工作区：${workspaceDisplayName(session.cwd)}` : "先选择工作区");
     this.renderHeaderHistory();
   }
 

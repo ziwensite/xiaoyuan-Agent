@@ -13,7 +13,7 @@ import type { PermissionMode, ServiceTierChoice, UiMode } from "../types/app-ser
 
 const ZH_CN = {
   languageName: "中文",
-  title: "Codex EchoInk 设置",
+  title: "小元 助理 设置",
   common: {
     enabled: "启用",
     disabled: "关闭",
@@ -33,7 +33,7 @@ const ZH_CN = {
     clear: "清空"
   },
   status: {
-    codexStatus: "Codex 状态",
+    codexStatus: "连接状态",
     accountStatus: "账号状态",
     agentBackend: "Agent 后端",
     connection: "连接方式",
@@ -45,18 +45,18 @@ const ZH_CN = {
     skillsCount: "Skills 数量",
     mcpCount: "MCP 数量",
     pluginDir: "插件目录",
-    refreshTitle: "重启 Codex，并读取最新登录状态",
-    refreshLogin: "刷新登录状态",
+    refreshTitle: "重新连接 OpenCode，并读取最新状态",
+    refreshLogin: "刷新连接状态",
     refreshing: "刷新中",
     diagnostics: "连接诊断",
-    refreshSuccess: (account: string) => `Codex 已刷新：${account}`,
-    refreshFailed: (error: string) => `Codex 连接失败：${error}`
+    refreshSuccess: (account: string) => `小元 已刷新：${account}`,
+    refreshFailed: (error: string) => `小元 连接失败：${error}`
   },
   setup: {
     blockedTitle: (count: number) => `启动前还差 ${count} 项`,
     blockedDesc: "按下面提示安装或登录后，点击重新检测。",
     readyTitle: "环境已就绪",
-    readyDesc: "必要环境已通过，可以开始使用 Codex EchoInk。",
+    readyDesc: "必要环境已通过，可以开始使用小元 助理。",
     checking: "正在重新检测",
     recheck: "重新检测",
     checkingButton: "检测中",
@@ -77,17 +77,17 @@ const ZH_CN = {
     settingsLanguage: "设置语言",
     settingsLanguageDesc: "只影响设置页显示；不会改写 Prompt、会话内容或用户自定义名称。",
     agentBackend: "Agent 后端",
-    agentBackendDesc: "Codex CLI 复用登录态；OpenCode API 用本机 OpenCode runtime 和自配 Provider。普通聊天暂继续走 Codex，知识库管理可选择 OpenCode。",
+    agentBackendDesc: "使用本机 OpenCode runtime 和自配 Provider。",
     cliPath: "Codex CLI 路径",
     cliPathDesc: "必须先安装并登录 Codex CLI。自定义 API 也通过 Codex CLI app-server 调用，不是插件直连 API。留空时自动查找。",
     proxyEnabled: "启用本地代理",
-    proxyEnabledDesc: "只影响插件启动的 Codex，不改全局配置。",
+    proxyEnabledDesc: "只影响插件启动的进程，不改全局配置。",
     proxyUrl: "代理地址",
     proxyUrlDesc: "如需本机代理，可填写 Clash 等代理地址。",
     mcpEnabled: "启用 MCP 工具",
     mcpEnabledDesc: "默认关闭以加快普通聊天；只影响聊天线程。",
     defaultModel: "默认模型",
-    defaultModelDesc: "留空时使用 Codex 返回的默认模型。",
+    defaultModelDesc: "留空时使用默认模型。",
     auto: "自动",
     defaultReasoning: "默认思考强度",
     defaultSpeed: "默认速度",
@@ -95,7 +95,7 @@ const ZH_CN = {
     defaultMode: "默认模式",
     autoOpen: "启动时自动打开侧栏",
     showContext: "显示上下文容量",
-    reconnect: "重新连接 Codex",
+    reconnect: "重新连接",
     languageOptions: {
       "zh-CN": "中文",
       en: "English"
@@ -322,14 +322,14 @@ const ZH_CN = {
   },
   resources: {
     title: "工作区能力管理",
-    note: "这里只改当前 Obsidian 仓库的线程配置，不写入桌面端 Codex 全局配置。",
+    note: "这里只改当前 Obsidian 仓库的线程配置。",
     tabs: {
       plugins: "插件",
       mcp: "MCP",
       skills: "Skills"
     } satisfies Record<ResourceManagementTab, string>,
     refreshTitle: "刷新当前列表",
-    loadingTab: (label: string) => `正在读取 Codex ${label}...`,
+    loadingTab: (label: string) => `正在读取 ${label}...`,
     notLoaded: "尚未读取能力列表。",
     searchPlaceholder: (label: string) => `搜索 ${label}`,
     searchAria: "搜索当前能力列表",
@@ -339,7 +339,7 @@ const ZH_CN = {
     noPlugins: "没有读取到插件。",
     noPluginMatches: "没有匹配的插件。",
     toolsCount: (count: number) => `${count} 个工具`,
-    mcpDesc: "来自 Codex MCP 配置",
+    mcpDesc: "来自 MCP 配置",
     mcpDisabledWarning: "聊天 MCP 总开关当前关闭；单项开关会保存，打开总开关后生效。",
     noMcp: "没有读取到 MCP 服务器。",
     noMcpMatches: "没有匹配的 MCP 服务器。",
@@ -348,7 +348,7 @@ const ZH_CN = {
     noSkillMatches: "没有匹配的 Skill。",
     summary: (enabled: number, total: number, visible: number, searching: boolean) => searching ? `已允许 ${enabled} / ${total} · 显示 ${visible}` : `已允许 ${enabled} / ${total}`,
     toggleAria: (name: string) => `${name} 开关`,
-    codexDisconnected: "Codex 未连接"
+    codexDisconnected: "小元 未连接"
   },
   backendLabels: {
     "codex-cli": "Codex CLI",
@@ -364,7 +364,7 @@ export type SettingsCopy = typeof ZH_CN;
 
 const EN: SettingsCopy = {
   languageName: "English",
-  title: "Codex EchoInk Settings",
+  title: "XiaoYuan Assistant Settings",
   common: {
     enabled: "Enabled",
     disabled: "Off",
@@ -384,7 +384,7 @@ const EN: SettingsCopy = {
     clear: "Clear"
   },
   status: {
-    codexStatus: "Codex",
+    codexStatus: "Status",
     accountStatus: "Account",
     agentBackend: "Agent backend",
     connection: "Connection",
@@ -396,18 +396,18 @@ const EN: SettingsCopy = {
     skillsCount: "Skills",
     mcpCount: "MCP",
     pluginDir: "Plugin dir",
-    refreshTitle: "Restart Codex and refresh login state",
-    refreshLogin: "Refresh login",
+    refreshTitle: "Reconnect OpenCode and refresh status",
+    refreshLogin: "Refresh connection",
     refreshing: "Refreshing",
     diagnostics: "Connection diagnostic",
-    refreshSuccess: (account) => `Codex refreshed: ${account}`,
-    refreshFailed: (error) => `Codex failed: ${error}`
+    refreshSuccess: (account) => `XiaoYuan refreshed: ${account}`,
+    refreshFailed: (error) => `XiaoYuan failed: ${error}`
   },
   setup: {
     blockedTitle: (count) => `${count} item${count === 1 ? "" : "s"} before startup`,
     blockedDesc: "Install or sign in using the steps below, then run the check again.",
     readyTitle: "Environment ready",
-    readyDesc: "Required runtime checks passed. You can start using Codex EchoInk.",
+    readyDesc: "Required runtime checks passed. You can start using XiaoYuan Assistant.",
     checking: "Checking environment",
     recheck: "Run check again",
     checkingButton: "Checking",
@@ -428,17 +428,17 @@ const EN: SettingsCopy = {
     settingsLanguage: "Settings language",
     settingsLanguageDesc: "Only changes this settings page. Prompts, chats, and custom names are unchanged.",
     agentBackend: "Agent backend",
-    agentBackendDesc: "Codex CLI reuses your login. OpenCode API uses local OpenCode and configured providers. General chat still uses Codex; Knowledge can use OpenCode.",
+    agentBackendDesc: "Uses local OpenCode runtime and configured providers.",
     cliPath: "Codex CLI path",
     cliPathDesc: "Install and sign in to Codex CLI first. Custom APIs still run through Codex CLI app-server, not direct plugin calls. Leave empty to auto-detect.",
     proxyEnabled: "Use local proxy",
-    proxyEnabledDesc: "Only affects Codex started by this plugin. It does not change global config.",
+    proxyEnabledDesc: "Only affects the plugin's process. It does not change global config.",
     proxyUrl: "Proxy URL",
     proxyUrlDesc: "Use this for local proxies such as Clash.",
     mcpEnabled: "Enable MCP tools",
     mcpEnabledDesc: "Off by default for faster chat. Only affects chat threads.",
     defaultModel: "Default model",
-    defaultModelDesc: "Leave empty to use the Codex default.",
+    defaultModelDesc: "Leave empty to use the default.",
     auto: "Auto",
     defaultReasoning: "Default reasoning",
     defaultSpeed: "Default speed",
@@ -446,7 +446,7 @@ const EN: SettingsCopy = {
     defaultMode: "Default mode",
     autoOpen: "Open sidebar on startup",
     showContext: "Show context usage",
-    reconnect: "Reconnect Codex",
+    reconnect: "Reconnect",
     languageOptions: {
       "zh-CN": "中文",
       en: "English"
@@ -673,14 +673,14 @@ const EN: SettingsCopy = {
   },
   resources: {
     title: "Workspace capabilities",
-    note: "Only changes thread config for the current Obsidian vault. It does not write global Codex desktop config.",
+    note: "Only changes thread config for the current Obsidian vault.",
     tabs: {
       plugins: "Plugins",
       mcp: "MCP",
       skills: "Skills"
     },
     refreshTitle: "Refresh current list",
-    loadingTab: (label) => `Loading Codex ${label}...`,
+    loadingTab: (label) => `Loading ${label}...`,
     notLoaded: "Capability list not loaded yet.",
     searchPlaceholder: (label) => `Search ${label}`,
     searchAria: "Search current capability list",
@@ -690,7 +690,7 @@ const EN: SettingsCopy = {
     noPlugins: "No plugins loaded.",
     noPluginMatches: "No matching plugins.",
     toolsCount: (count) => `${count} tools`,
-    mcpDesc: "From Codex MCP config",
+    mcpDesc: "From MCP config",
     mcpDisabledWarning: "The chat MCP master switch is off. Per-item switches are saved and apply when the master switch is enabled.",
     noMcp: "No MCP servers loaded.",
     noMcpMatches: "No matching MCP servers.",
@@ -699,7 +699,7 @@ const EN: SettingsCopy = {
     noSkillMatches: "No matching Skills.",
     summary: (enabled, total, visible, searching) => searching ? `Allowed ${enabled} / ${total} · Showing ${visible}` : `Allowed ${enabled} / ${total}`,
     toggleAria: (name) => `${name} toggle`,
-    codexDisconnected: "Codex disconnected"
+    codexDisconnected: "XiaoYuan disconnected"
   },
   backendLabels: {
     "codex-cli": "Codex CLI",
