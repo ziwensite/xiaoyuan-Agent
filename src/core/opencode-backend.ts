@@ -78,7 +78,20 @@ export class OpenCodeBackend implements AgentBackend {
       command = resolveOpenCodeCommand(this.options.cliPath);
       const fallbackUrl = normalizeOpenCodeServerUrl("", this.options.hostname, this.options.port);
 
-      if (this.options.autoStart) {
+      // 先尝试连接现有服务器
+      let connected = false;
+      try {
+        this.client = createOpencodeClient({ baseUrl: fallbackUrl, directory: this.options.vaultPath, fetch: nodeFetch });
+        await unwrapOpenCodeResult(this.client.global.health(), "OpenCode 连接失败");
+        serverUrl = fallbackUrl;
+        connected = true;
+      } catch (e) {
+        // 现有服务器连接失败，继续尝试启动新服务器
+        this.client = null;
+      }
+
+      // 如果没有连接成功且允许自动启动，则启动新服务器
+      if (!connected && this.options.autoStart) {
         try {
           startedServer = await startOpenCodeServer({
             command,
@@ -88,15 +101,20 @@ export class OpenCodeBackend implements AgentBackend {
           });
           serverUrl = startedServer.url;
         } catch (startError) {
-          console.warn(`Failed to start OpenCode server, trying existing server: ${startError}`);
-          serverUrl = fallbackUrl;
+          console.warn(`Failed to start OpenCode server: ${startError}`);
+          throw startError;
         }
-      } else {
-        serverUrl = fallbackUrl;
+      } else if (!connected) {
+        // 如果没有连接成功且不允许自动启动，则抛出错误
+        throw new Error("OpenCode server is not running and auto-start is disabled");
       }
     }
 
-    this.client = createOpencodeClient({ baseUrl: serverUrl, directory: this.options.vaultPath, fetch: nodeFetch });
+    // 确保 client 已创建
+    if (!this.client) {
+      this.client = createOpencodeClient({ baseUrl: serverUrl, directory: this.options.vaultPath, fetch: nodeFetch });
+    }
+
     const health = await unwrapOpenCodeResult(this.client.global.health(), "OpenCode 连接失败");
     this.startedServer = startedServer;
     this.connectionInfo = {

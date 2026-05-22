@@ -83,9 +83,11 @@ export function modelInputModalities(model: Pick<Model, "capabilities"> | null |
 export function flattenOpenCodeModels(providers: Provider[]): AgentModelInfo[] {
   const models: AgentModelInfo[] = [];
   for (const provider of providers) {
-    if (!provider.configured) continue;
+    // 只过滤掉明确标记为未配置的提供商
+    if (provider.configured === false) continue;
     for (const model of Object.values(provider.models ?? {})) {
-      if (!model.enabled) continue;
+      // 只过滤掉明确标记为未启用的模型
+      if (model.enabled === false) continue;
       models.push({
         id: `${provider.id}/${model.id}`,
         providerId: provider.id,
