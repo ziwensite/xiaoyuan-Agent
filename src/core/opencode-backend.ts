@@ -72,21 +72,33 @@ export class OpenCodeBackend implements AgentBackend {
     const errors: string[] = [];
     let serverUrl = normalizeOpenCodeServerUrl(this.options.serverUrl, this.options.hostname, this.options.port);
     let command = "";
+    let startedServer: StartedOpenCodeServer | null = null;
+
     if (!this.options.serverUrl.trim()) {
       command = resolveOpenCodeCommand(this.options.cliPath);
+      const fallbackUrl = normalizeOpenCodeServerUrl("", this.options.hostname, this.options.port);
+
       if (this.options.autoStart) {
-        this.startedServer = await startOpenCodeServer({
-          command,
-          hostname: this.options.hostname,
-          port: this.options.port,
-          cwd: this.options.vaultPath
-        });
-        serverUrl = this.startedServer.url;
+        try {
+          startedServer = await startOpenCodeServer({
+            command,
+            hostname: this.options.hostname,
+            port: this.options.port,
+            cwd: this.options.vaultPath
+          });
+          serverUrl = startedServer.url;
+        } catch (startError) {
+          console.warn(`Failed to start OpenCode server, trying existing server: ${startError}`);
+          serverUrl = fallbackUrl;
+        }
+      } else {
+        serverUrl = fallbackUrl;
       }
     }
 
     this.client = createOpencodeClient({ baseUrl: serverUrl, directory: this.options.vaultPath, fetch: nodeFetch });
     const health = await unwrapOpenCodeResult(this.client.global.health(), "OpenCode 连接失败");
+    this.startedServer = startedServer;
     this.connectionInfo = {
       connected: true,
       serverUrl,
