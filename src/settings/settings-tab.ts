@@ -1,7 +1,7 @@
 import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, setIcon, TFile, type FuzzyMatch } from "obsidian";
 import type CodexForObsidianPlugin from "../main";
 import { OpenCodeBackend } from "../core/opencode-backend";
-import { detectOpenCodeCommand } from "../core/opencode-models";
+import { detectOpenCodeCommand, type Provider } from "../core/opencode-models";
 import type { AgentModelInfo, AgentProfileInfo } from "../agent/types";
 import {
   errorsFromWorkspaceResourceCache,
@@ -59,6 +59,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private resourceLoadErrors: Partial<Record<ResourceManagementTab, string>> = {};
   private resourceSearchQuery: Record<ResourceManagementTab, string> = { plugins: "", mcp: "", skills: "" };
   private openCodeModelChoices: AgentModelInfo[] = [];
+  private openCodeProviders: Provider[] = [];
   private openCodeModelsLoaded = false;
   private openCodeModelsLoading = false;
   private openCodeModelsError = "";
@@ -1058,9 +1059,24 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       } else if (!values.has(currentValue)) {
         select.createEl("option", { text: copy.opencode.currentModelMissing(opencode.providerId, opencode.modelId), value: currentValue });
       }
-      for (const model of this.openCodeModelChoices) {
-        select.createEl("option", { text: openCodeModelChoiceLabel(model, this.plugin.settings.settingsLanguage), value: openCodeModelChoiceValue(model) });
+
+      // Group models by provider using optgroup
+      for (const provider of this.openCodeProviders) {
+        // Skip unconfigured providers
+        if (provider.configured === false) continue;
+        
+        const providerId = provider.id;
+        const providerName = provider.name || providerId;
+        const providerModels = this.openCodeModelChoices.filter(model => model.providerId === providerId);
+        
+        if (providerModels.length > 0) {
+          const optgroup = select.createEl("optgroup", { attr: { label: providerName } });
+          for (const model of providerModels) {
+            optgroup.createEl("option", { text: model.displayName.split(" · ").slice(1).join(" · "), value: openCodeModelChoiceValue(model) });
+          }
+        }
       }
+
       select.value = currentValue && (values.has(currentValue) || opencode.providerId) ? currentValue : "";
       select.onchange = async () => {
         const parsed = parseOpenCodeModelChoiceValue(select.value);
@@ -1190,8 +1206,12 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       await backend.connect();
       const opencode = this.plugin.settings.opencode;
       if (shouldLoadModels) {
-        const models = await backend.listModels();
+        const [models, providers] = await Promise.all([
+          backend.listModels(),
+          backend.listProviders()
+        ]);
         this.openCodeModelChoices = models;
+        this.openCodeProviders = providers;
         this.openCodeModelsLoaded = true;
         const current = models.find((model) => model.providerId === opencode.providerId && model.modelId === opencode.modelId);
         if (current) this.applyOpenCodeModelChoice(current);

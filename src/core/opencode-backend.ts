@@ -145,6 +145,12 @@ export class OpenCodeBackend implements AgentBackend {
     return flattenOpenCodeModels(response?.all ?? []);
   }
 
+  async listProviders(): Promise<Provider[]> {
+    const client = this.requireClient();
+    const response = await unwrapOpenCodeResult(client.provider.list({ directory: this.options.vaultPath }), "读取 OpenCode 提供商失败");
+    return response?.all ?? [];
+  }
+
   async listAgents(): Promise<AgentProfileInfo[]> {
     const client = this.requireClient();
     const response = await unwrapOpenCodeResult(client.app.agents({ directory: this.options.vaultPath }), "读取 OpenCode Agent 失败");

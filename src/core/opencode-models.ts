@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 import type { Agent, FilePartInput, Model, Provider, TextPartInput } from "@opencode-ai/sdk/v2";
 import type { AgentInputModality, AgentModelInfo, AgentProfileInfo, AgentPromptPart } from "../agent/types";
 
+export type { Provider };
+
 export interface OpenCodeCommandResolveOptions {
   home?: string;
   envPath?: string;
