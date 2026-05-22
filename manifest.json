@@ -1,7 +1,7 @@
 {
   "id": "xiaoyuan-agent",
   "name": "小元",
-  "version": "0.6.0",
+  "version": "0.1.0",
   "minAppVersion": "1.4.5",
   "description": "使用 OpenCode 管理知识库、回答仓库问题、协助写作的 Obsidian 助手插件。",
   "author": "ziwensite",

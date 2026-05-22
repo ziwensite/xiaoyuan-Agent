@@ -1,6 +1,6 @@
 {
   "name": "xiao-yuan",
-  "version": "0.6.0",
+  "version": "0.1.0",
   "description": "小元 - 使用 OpenCode 的 Obsidian 助手插件",
   "main": "dist/main.js",
   "scripts": {
