@@ -412,12 +412,25 @@ function defaultOpenCodeModel(options: OpenCodeBackendOptions): { providerId: st
 
 async function startOpenCodeServer(input: { command: string; hostname: string; port: number; cwd: string }): Promise<StartedOpenCodeServer> {
   const args = ["serve", `--hostname=${input.hostname || "127.0.0.1"}`, `--port=${input.port || 4096}`];
-  const proc = spawn(input.command, args, {
-    cwd: input.cwd,
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true
-  });
+  const isWindows = process.platform === "win32";
+  const isCmdOrPs1 = /\.(cmd|ps1)$/i.test(input.command);
+  
+  let proc: ChildProcess;
+  if (isWindows && isCmdOrPs1) {
+    proc = spawn(input.command, args, {
+      cwd: input.cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: true
+    });
+  } else {
+    proc = spawn(input.command, args, {
+      cwd: input.cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: !isWindows
+    });
+  }
   const fallbackUrl = normalizeOpenCodeServerUrl("", input.hostname, input.port);
   let output = "";
   const started = new Promise<string>((resolve, reject) => {
@@ -456,7 +469,8 @@ async function startOpenCodeServer(input: { command: string; hostname: string; p
 
 function stopOpenCodeServer(proc: ChildProcess): void {
   if (proc.exitCode !== null || proc.signalCode !== null) return;
-  if (typeof proc.pid === "number") {
+  const isWindows = process.platform === "win32";
+  if (typeof proc.pid === "number" && !isWindows) {
     try {
       process.kill(-proc.pid, "SIGTERM");
       globalThis.setTimeout(() => {
