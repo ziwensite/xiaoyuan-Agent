@@ -86,10 +86,10 @@ export function flattenOpenCodeModels(providers: Provider[]): AgentModelInfo[] {
   const models: AgentModelInfo[] = [];
   for (const provider of providers) {
     // 只过滤掉明确标记为未配置的提供商
-    if (provider.configured === false) continue;
+    if ((provider as any).configured === false) continue;
     for (const model of Object.values(provider.models ?? {})) {
       // 只过滤掉明确标记为未启用的模型
-      if (model.enabled === false) continue;
+      if ((model as any).enabled === false) continue;
       models.push({
         id: `${provider.id}/${model.id}`,
         providerId: provider.id,

@@ -18,7 +18,7 @@ export interface ParsedDiffFile extends DiffFileSummary {
   lines: DiffLineView[];
 }
 
-const FILE_CHANGE_HEADER_PREFIX = "### Codex file change: ";
+const FILE_CHANGE_HEADER_PREFIX = "### file change: ";
 
 export function buildDiffSummary(changes: RawFileChange[]): DiffSummary {
   const files = changes.map((change) => {

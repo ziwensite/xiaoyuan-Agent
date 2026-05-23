@@ -3,7 +3,7 @@ export type PermissionMode = "read-only" | "workspace-write" | "danger-full-acce
 export type UiMode = "agent" | "plan";
 export type ServiceTierChoice = "standard" | "fast" | "flex";
 
-export interface CodexModel {
+export interface ModelOption {
   id: string;
   model: string;
   displayName: string;
@@ -14,7 +14,7 @@ export interface CodexModel {
   inputModalities?: string[];
 }
 
-export interface CodexSkill {
+export interface SkillSpec {
   name: string;
   description: string;
   path: string;
@@ -22,7 +22,7 @@ export interface CodexSkill {
   enabled?: boolean;
 }
 
-export interface CodexPluginInfo {
+export interface PluginInfo {
   id: string;
   name: string;
   displayName: string;
@@ -42,8 +42,8 @@ export interface McpServerStatus {
 }
 
 export interface WorkspaceResourceSnapshot {
-  plugins: CodexPluginInfo[];
-  skills: CodexSkill[];
+  plugins: PluginInfo[];
+  skills: SkillSpec[];
   mcpServers: McpServerStatus[];
   errors: {
     plugins?: string;
@@ -89,22 +89,6 @@ export interface SandboxPolicy {
   excludeSlashTmp?: boolean;
 }
 
-export interface CodexStatusSnapshot {
-  connected: boolean;
-  codexHome?: string;
-  platform?: string;
-  accountLabel: string;
-  loggedIn: boolean;
-  configModel?: string | null;
-  profile?: string | null;
-  models: CodexModel[];
-  skills: CodexSkill[];
-  mcpServers: McpServerStatus[];
-  rateLimits?: RateLimitSnapshot | null;
-  rateLimitsByLimitId?: Record<string, RateLimitSnapshot | undefined> | null;
-  errors: string[];
-}
-
 export interface TokenUsage {
   total?: {
     totalTokens?: number;
@@ -141,13 +125,26 @@ export interface ProcessEventSummary {
   kind: ProcessEventKind;
 }
 
-export interface CodexNotification {
+export interface BackendNotification {
   method: string;
   params: any;
 }
 
-export interface CodexServerRequest {
+export interface ServerRequest {
   method: string;
   id: number | string;
   params: any;
+}
+
+export interface TurnOptions {
+  model: string;
+  reasoning: string;
+  serviceTier: ServiceTierChoice;
+  permission: PermissionMode;
+  mode: UiMode;
+  mcpEnabled: boolean;
+  persistExtendedHistory: boolean;
+  requestTimeoutMs: number;
+  writableRoots?: string[];
+  workspaceResources?: Record<string, Record<string, boolean>>;
 }

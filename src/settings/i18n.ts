@@ -42,7 +42,7 @@ const ZH_CN = {
     hybridDesc: "思考规划用 API，执行操作用 OpenCode"
   },
   status: {
-    codexStatus: "连接状态",
+    connectionStatus: "连接状态",
     accountStatus: "账号状态",
     agentBackend: "Agent 后端",
     connection: "连接方式",
@@ -76,8 +76,8 @@ const ZH_CN = {
     settingsLanguageDesc: "只影响设置页显示；不会改写 Prompt、会话内容或用户自定义名称。",
     agentBackend: "Agent 后端",
     agentBackendDesc: "使用本机 OpenCode runtime 和自配 Provider。",
-    cliPath: "Codex CLI 路径",
-    cliPathDesc: "必须先安装并登录 Codex CLI。自定义 API 也通过 Codex CLI app-server 调用，不是插件直连 API。留空时自动查找。",
+    cliPath: "OpenCode CLI 路径",
+    cliPathDesc: "必须先安装并登录 OpenCode CLI。自定义 API 也通过 OpenCode CLI app-server 调用，不是插件直连 API。留空时自动查找。",
     proxyEnabled: "启用本地代理",
     proxyEnabledDesc: "只影响插件启动的进程，不改全局配置。",
     proxyUrl: "代理地址",
@@ -140,7 +140,7 @@ const ZH_CN = {
     enabled: "启用知识库管理",
     enabledDesc: "总开关：只决定是否允许每日自动维护和启动补跑；真正每天跑，还需要打开下面的“每日自动维护”。右侧知识库频道仍可手动使用。",
     backend: "知识库后端",
-    backendDesc: "默认跟随基础设置里的 Agent 后端；也可以单独固定为 Codex 或 OpenCode。",
+    backendDesc: "默认跟随基础设置里的 Agent 后端；也可以单独固定为 OpenCode。",
     followGlobal: (backend: string) => `跟随全局（${backend}）`,
     customRules: "使用自定义指南文件",
     customRulesDesc: (defaultFile: string, agentsFile: string) => `默认使用 ${defaultFile}；关闭后改用 Vault 根目录 ${agentsFile}，仅作为兼容选项。`,
@@ -167,7 +167,7 @@ const ZH_CN = {
     rulesFileNoteLegacy: (agentsFile: string, defaultFile: string) => `兼容模式：知识库任务读取 Vault 根目录 ${agentsFile}。建议改用 ${defaultFile}。`,
     memoryHeading: "长期记忆增强",
     memoryNote1: "知识库管理不内置记忆 Skills，也不会修改当前 Vault 的 AGENTS.md。需要跨会话维护长期上下文时，建议手动安装 codex-memory-lite。",
-    memoryNote2: "使用方式：让你的 Codex/OpenCode Agent 按仓库说明安装这个 Skill；进入对应工作区后，由 Agent 自己运行 bootstrap 初始化记忆体系，再在 /init、/check、/maintain 时按需同步项目记忆。",
+    memoryNote2: "使用方式：让你的 OpenCode Agent 按仓库说明安装这个 Skill；进入对应工作区后，由 Agent 自己运行 bootstrap 初始化记忆体系，再在 /init、/check、/maintain 时按需同步项目记忆。",
     openMemorySkill: "打开 codex-memory-lite",
     storageHeading: "历史与存储",
     storageLoading: "正在统计历史数据...",
@@ -235,8 +235,8 @@ const ZH_CN = {
     opencodeMode: "OpenCode API 模式",
     customApiMode: "自定义 API 模式",
     warningKey: "API key 会明文保存在 Obsidian 插件数据里；只建议本机使用，不建议同步或提交。",
-    warningApi: "自定义 API 仍需要本机 Codex CLI。Base URL 必须兼容 OpenAI Responses API；只支持 /v1/chat/completions 的通用 OpenAI 格式通常不可用。",
-    loginMode: "Codex 登录态",
+    warningApi: "自定义 API 仍需要本机 OpenCode CLI。Base URL 必须兼容 OpenAI Responses API；只支持 /v1/chat/completions 的通用 OpenAI 格式通常不可用。",
+    loginMode: "OpenCode 登录态",
     add: "新增",
     addTitle: "新增 API Provider",
     defaultName: "自定义 API",
@@ -252,11 +252,11 @@ const ZH_CN = {
     queryParams: "Query Params",
     responseApiRequirement: "要求：服务端需支持 Responses API，例如 /v1/responses；只支持 Chat Completions 的服务可能无法使用。",
     models: "模型",
-    configChanged: "修改配置后，需要再次点击“启用并重连”才会让当前 Codex 进程生效。"
+    configChanged: "修改配置后，需要再次点击“启用并重连”才会让当前 OpenCode 进程生效。"
   },
   writing: {
     requestMode: "写作请求方式",
-    requestModeDesc: "通过当前 Codex CLI 发起请求；自定义 API 仍需本机 Codex CLI 支持 Responses API。",
+    requestModeDesc: "通过当前 OpenCode CLI 发起请求；自定义 API 仍需本机 OpenCode CLI 支持 Responses API。",
     enabled: "启用写作操作",
     enabledDesc: "开启后，编辑区选中文字右键可选择改写、扩写、续写、翻译成英文。",
     statusSlot: "显示侧栏写作状态",
@@ -348,14 +348,12 @@ const ZH_CN = {
     noSkillMatches: "没有匹配的 Skill。",
     summary: (enabled: number, total: number, visible: number, searching: boolean) => searching ? `已允许 ${enabled} / ${total} · 显示 ${visible}` : `已允许 ${enabled} / ${total}`,
     toggleAria: (name: string) => `${name} 开关`,
-    codexDisconnected: "小元 未连接"
+    disconnectedLabel: "小元 未连接"
   },
   backendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   } satisfies Record<AgentBackendMode, string>,
   knowledgeBackendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   } satisfies Record<AgentBackendMode, string>
 };
@@ -393,7 +391,7 @@ const EN: SettingsCopy = {
     hybridDesc: "Thinking & planning with API, execution with OpenCode"
   },
   status: {
-    codexStatus: "Status",
+    connectionStatus: "Status",
     accountStatus: "Account",
     agentBackend: "Agent backend",
     connection: "Connection",
@@ -427,8 +425,8 @@ const EN: SettingsCopy = {
     settingsLanguageDesc: "Only changes this settings page. Prompts, chats, and custom names are unchanged.",
     agentBackend: "Agent backend",
     agentBackendDesc: "Uses local OpenCode runtime and configured providers.",
-    cliPath: "Codex CLI path",
-    cliPathDesc: "Install and sign in to Codex CLI first. Custom APIs still run through Codex CLI app-server, not direct plugin calls. Leave empty to auto-detect.",
+    cliPath: "OpenCode CLI path",
+    cliPathDesc: "Install and sign in to OpenCode CLI first. Custom APIs still run through OpenCode CLI app-server, not direct plugin calls. Leave empty to auto-detect.",
     proxyEnabled: "Use local proxy",
     proxyEnabledDesc: "Only affects the plugin's process. It does not change global config.",
     proxyUrl: "Proxy URL",
@@ -491,7 +489,7 @@ const EN: SettingsCopy = {
     enabled: "Enable Knowledge",
     enabledDesc: "Master gate for automatic maintenance and startup catch-up. Daily runs still require Automatic maintenance below. The Knowledge channel remains available for manual work.",
     backend: "Knowledge backend",
-    backendDesc: "Follow the global Agent backend, or pin Knowledge to Codex or OpenCode.",
+    backendDesc: "Follow the global Agent backend, or pin Knowledge to OpenCode.",
     followGlobal: (backend) => `Follow global (${backend})`,
     customRules: "Use custom guide file",
     customRulesDesc: (defaultFile, agentsFile) => `Defaults to ${defaultFile}. Turning this off uses vault-root ${agentsFile} as a compatibility fallback.`,
@@ -518,7 +516,7 @@ const EN: SettingsCopy = {
     rulesFileNoteLegacy: (agentsFile, defaultFile) => `Compatibility mode reads vault-root ${agentsFile}. ${defaultFile} is recommended.`,
     memoryHeading: "Long-term memory",
     memoryNote1: "Knowledge does not bundle memory Skills and will not edit this vault's AGENTS.md. For long-running context, install codex-memory-lite manually.",
-    memoryNote2: "Usage: let your Codex/OpenCode Agent install the Skill from its repo, enter the target workspace, and run bootstrap there. /init, /check, and /maintain can then sync memory as needed.",
+    memoryNote2: "Usage: let your OpenCode Agent install the Skill from its repo, enter the target workspace, and run bootstrap there. /init, /check, and /maintain can then sync memory as needed.",
     openMemorySkill: "Open codex-memory-lite",
     storageHeading: "History and storage",
     storageLoading: "Calculating history storage...",
@@ -586,8 +584,8 @@ const EN: SettingsCopy = {
     opencodeMode: "OpenCode API Mode",
     customApiMode: "Custom API Mode",
     warningKey: "API keys are stored as plain text in Obsidian plugin data. Use locally only; do not sync or commit them.",
-    warningApi: "Custom APIs still require local Codex CLI. Base URL must support OpenAI Responses API. Generic /v1/chat/completions-only services may not work.",
-    loginMode: "Codex login",
+    warningApi: "Custom APIs still require local OpenCode CLI. Base URL must support OpenAI Responses API. Generic /v1/chat/completions-only services may not work.",
+    loginMode: "OpenCode login",
     add: "Add",
     addTitle: "Add API Provider",
     defaultName: "Custom API",
@@ -603,11 +601,11 @@ const EN: SettingsCopy = {
     queryParams: "Query Params",
     responseApiRequirement: "Required: server must support Responses API, such as /v1/responses. Chat Completions-only services may not work.",
     models: "Models",
-    configChanged: "After editing config, click “Enable and reconnect” again to apply it to the current Codex process."
+    configChanged: "After editing config, click “Enable and reconnect” again to apply it to the current OpenCode process."
   },
   writing: {
     requestMode: "Writing request mode",
-    requestModeDesc: "Requests run through the current Codex CLI. Custom APIs still need local Codex CLI support for Responses API.",
+    requestModeDesc: "Requests run through the current OpenCode CLI. Custom APIs still need local OpenCode CLI support for Responses API.",
     enabled: "Enable writing actions",
     enabledDesc: "When enabled, selected editor text can be rewritten, expanded, continued, or translated to English from the context menu.",
     statusSlot: "Show sidebar writing status",
@@ -699,14 +697,12 @@ const EN: SettingsCopy = {
     noSkillMatches: "No matching Skills.",
     summary: (enabled, total, visible, searching) => searching ? `Allowed ${enabled} / ${total} · Showing ${visible}` : `Allowed ${enabled} / ${total}`,
     toggleAria: (name) => `${name} toggle`,
-    codexDisconnected: "XiaoYuan disconnected"
+    disconnectedLabel: "XiaoYuan disconnected"
   },
   backendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   },
   knowledgeBackendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   }
 };

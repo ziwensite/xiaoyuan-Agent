@@ -1,4 +1,4 @@
-import type { CodexPluginInfo, CodexSkill, McpServerStatus, WorkspaceResourceSnapshot } from "../types/app-server";
+import type { PluginInfo, SkillSpec, McpServerStatus, WorkspaceResourceSnapshot } from "../types/app-server";
 import type { ResourceManagementTab, WorkspaceResourceCache } from "../settings/settings";
 
 export type WorkspaceResourceKind = "plugins" | "mcp" | "skills";
@@ -15,18 +15,18 @@ export function emptyWorkspaceResourceSnapshot(): WorkspaceResourceSnapshot {
 export function mergeWorkspaceResourceSnapshot(
   snapshot: WorkspaceResourceSnapshot | null,
   kind: WorkspaceResourceKind,
-  data: CodexPluginInfo[] | CodexSkill[] | McpServerStatus[],
+  data: PluginInfo[] | SkillSpec[] | McpServerStatus[],
   error: string | null
 ): WorkspaceResourceSnapshot {
   const next = snapshot ? cloneSnapshot(snapshot) : emptyWorkspaceResourceSnapshot();
   if (kind === "plugins") {
-    next.plugins = data as CodexPluginInfo[];
+    next.plugins = data as PluginInfo[];
     setError(next, "plugins", error);
   } else if (kind === "mcp") {
     next.mcpServers = data as McpServerStatus[];
     setError(next, "mcp", error);
   } else {
-    next.skills = data as CodexSkill[];
+    next.skills = data as SkillSpec[];
     setError(next, "skills", error);
   }
   return next;
@@ -64,7 +64,7 @@ export function errorsFromWorkspaceResourceCache(cache: WorkspaceResourceCache |
 export function updateWorkspaceResourceCache(
   cache: WorkspaceResourceCache | undefined,
   kind: WorkspaceResourceKind,
-  data: CodexPluginInfo[] | CodexSkill[] | McpServerStatus[],
+  data: PluginInfo[] | SkillSpec[] | McpServerStatus[],
   error: string | null
 ): WorkspaceResourceCache {
   const next: WorkspaceResourceCache = { ...(cache ?? {}) };
@@ -104,7 +104,7 @@ function setError(snapshot: WorkspaceResourceSnapshot, key: keyof WorkspaceResou
   else delete snapshot.errors[key];
 }
 
-function sanitizeCacheItems(kind: WorkspaceResourceKind, data: CodexPluginInfo[] | CodexSkill[] | McpServerStatus[]): CodexPluginInfo[] | CodexSkill[] | McpServerStatus[] {
+function sanitizeCacheItems(kind: WorkspaceResourceKind, data: PluginInfo[] | SkillSpec[] | McpServerStatus[]): PluginInfo[] | SkillSpec[] | McpServerStatus[] {
   if (kind === "mcp") {
     return (data as McpServerStatus[]).map((server) => ({
       name: server.name,
@@ -115,7 +115,7 @@ function sanitizeCacheItems(kind: WorkspaceResourceKind, data: CodexPluginInfo[]
     }));
   }
   if (kind === "plugins") {
-    return (data as CodexPluginInfo[]).map((plugin) => ({ ...plugin }));
+    return (data as PluginInfo[]).map((plugin) => ({ ...plugin }));
   }
-  return (data as CodexSkill[]).map((skill) => ({ ...skill }));
+  return (data as SkillSpec[]).map((skill) => ({ ...skill }));
 }

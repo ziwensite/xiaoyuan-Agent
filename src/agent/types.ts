@@ -1,6 +1,6 @@
 import type { PermissionMode, ReasoningEffort, ServiceTierChoice, UiMode } from "../types/app-server";
 
-export type AgentBackendKind = "codex-cli" | "opencode";
+export type AgentBackendKind = "opencode";
 export type AgentInputModality = "text" | "image" | "pdf";
 
 export interface AgentModelInfo {

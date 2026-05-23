@@ -3,7 +3,7 @@ import * as fsp from "fs/promises";
 import * as path from "path";
 import { execFile } from "child_process";
 import { Notice, normalizePath, requestUrl, TFile } from "obsidian";
-import type CodexForObsidianPlugin from "../main";
+import type XiaoyuanPlugin from "../main";
 import type { AgentInputModality, AgentModelInfo, AgentPromptPart } from "../agent/types";
 import { OpenCodeBackend } from "../core/opencode-backend";
 import { ensureOpenCodeModelSupportsFiles, requiredModalityForMime } from "../core/opencode-models";
@@ -41,7 +41,7 @@ export class KnowledgeBaseManager {
   private schedulerStartedAt = 0;
   private activeOpenCode: { backend: OpenCodeBackend; sessionId: string } | null = null;
 
-  constructor(private readonly plugin: CodexForObsidianPlugin) {}
+  constructor(private readonly plugin: XiaoyuanPlugin) {}
 
   register(): void {
     this.plugin.addCommand({
@@ -388,7 +388,7 @@ export class KnowledgeBaseManager {
           settings.lastSummary = recoveredLintReportSummary(discovery.reportPath);
           recordKnowledgeBaseMaintenanceRun(settings, { status: "success", mode, reportPath: discovery.reportPath });
           await this.plugin.saveSettings(true);
-          new Notice("知识库体检完成，Codex 状态有警告");
+          new Notice("知识库体检完成，OpenCode 状态有警告");
           return {
             status: "success",
             reportPath: discovery.reportPath,
@@ -412,7 +412,6 @@ export class KnowledgeBaseManager {
         error: message
       };
     } finally {
-      this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
       this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
@@ -452,7 +451,7 @@ export class KnowledgeBaseManager {
         message: error instanceof Error ? error.message : String(error)
       };
     } finally {
-      this.activeCodexRun = null;
+
       this.activeOpenCode = null;
       this.running = false;
       this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
@@ -482,7 +481,6 @@ export class KnowledgeBaseManager {
           ].join("\n")
           : request,
         target,
-        backend: "opencode",
         openCodeHistory
       });
       const output = await this.runOpenCodeKnowledgeTask(prompt, [], "workspace-write");
@@ -499,7 +497,7 @@ export class KnowledgeBaseManager {
         message: error instanceof Error ? error.message : String(error)
       };
     } finally {
-      this.activeCodexRun = null;
+
       this.activeOpenCode = null;
       this.running = false;
       this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
@@ -731,7 +729,7 @@ export class KnowledgeBaseManager {
     const vaultPath = this.plugin.getVaultPath();
     const dest = path.join(vaultPath, "raw", "articles", "微信公众号");
     await fsp.mkdir(dest, { recursive: true });
-    const skillScript = path.join(process.env.HOME || "", ".codex", "skills", "wechat-article-to-obsidian-raw", "scripts", "wechat_capture.mjs");
+    const skillScript = path.join(process.env.HOME || "", ".opencode", "skills", "wechat-article-to-obsidian-raw", "scripts", "wechat_capture.mjs");
     if (await exists(skillScript)) {
       try {
         const { stdout } = await execFilePromise("node", [skillScript, url, "--dest", dest], {
@@ -850,18 +848,6 @@ export class KnowledgeBaseManager {
   }
 }
 
-function buildCodexKnowledgeInput(prompt: string, sources: KnowledgeBaseSource[]): UserInput[] {
-  const input: UserInput[] = [{ type: "text", text: prompt, text_elements: [] }];
-  for (const source of sources.slice(0, MAX_ATTACHED_SOURCES)) {
-    if (source.modality === "image") {
-      input.push({ type: "localImage", path: source.absolutePath });
-    } else {
-      input.push({ type: "mention", name: path.basename(source.absolutePath), path: source.absolutePath });
-    }
-  }
-  return input;
-}
-
 function buildOpenCodeKnowledgeParts(prompt: string, sources: KnowledgeBaseSource[]): AgentPromptPart[] {
   return [
     { type: "text", text: prompt },
@@ -912,7 +898,7 @@ async function ensureFallbackReport(vaultPath: string, reportPath: string, input
   const lines = [
     "---",
     `created: ${new Date(input.startedAt).toISOString()}`,
-    "source: codex-echoink",
+    "source: xiaoyuan",
     "---",
     "",
     `# 知识库${labelForRunMode(input.mode)}报告 — ${formatDateForTitle(new Date(input.startedAt))}`,
@@ -930,8 +916,8 @@ async function ensureFallbackReport(vaultPath: string, reportPath: string, input
 async function appendStructureNormalizationReport(vaultPath: string, reportPath: string, structure: StructureNormalizationResult): Promise<void> {
   const absolute = path.join(vaultPath, reportPath);
   const current = await fsp.readFile(absolute, "utf8").catch(() => "");
-  const markerStart = "<!-- codex-echoink-structure:start -->";
-  const markerEnd = "<!-- codex-echoink-structure:end -->";
+  const markerStart = "<!-- xy-structure:start -->";
+  const markerEnd = "<!-- xy-structure:end -->";
   const lines = [
     markerStart,
     "",
@@ -973,8 +959,8 @@ async function appendStructureNormalizationReport(vaultPath: string, reportPath:
 async function writeKnowledgeBaseTracker(vaultPath: string, processed: Record<string, { path: string; size: number; mtime: number; digestedAt: number }>, updatedAt: number): Promise<void> {
   const tracker = path.join(vaultPath, "outputs", ".ingest-tracker.md");
   await fsp.mkdir(path.dirname(tracker), { recursive: true });
-  const markerStart = "<!-- codex-echoink-kb:start -->";
-  const markerEnd = "<!-- codex-echoink-kb:end -->";
+  const markerStart = "<!-- xy-kb:start -->";
+  const markerEnd = "<!-- xy-kb:end -->";
   const current = await fsp.readFile(tracker, "utf8").catch(() => "---\nupdated: \n---\n\n# Ingest Tracker\n");
   const entries = Object.values(processed)
     .sort((left, right) => left.path.localeCompare(right.path))
@@ -982,7 +968,7 @@ async function writeKnowledgeBaseTracker(vaultPath: string, processed: Record<st
   const block = [
     markerStart,
     "",
-    `## Codex EchoInk 处理记录（${new Date(updatedAt).toISOString()}）`,
+    `## 小元 处理记录（${new Date(updatedAt).toISOString()}）`,
     "",
     ...(entries.length ? entries : ["- 暂无"]),
     "",

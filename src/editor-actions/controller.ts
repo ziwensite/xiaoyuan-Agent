@@ -1,5 +1,5 @@
 import { Notice, type Editor, type MarkdownFileInfo, type MarkdownView, type Menu } from "obsidian";
-import type CodexForObsidianPlugin from "../main";
+import type XiaoyuanPlugin from "../main";
 import { newId, resolveEditorActionModeConfig } from "../settings/settings";
 import { cleanEditorActionOutput, validateEditorActionCandidateText } from "./output";
 import { buildEditorActionPrompt, resolveEditorActionStyle } from "./prompt";
@@ -12,7 +12,7 @@ export class EditorActionController {
   private active: { editor: Editor; candidate: EditorActionCandidate } | null = null;
   private confirming = false;
 
-  constructor(private readonly plugin: CodexForObsidianPlugin) {}
+  constructor(private readonly plugin: XiaoyuanPlugin) {}
 
   register(): void {
     this.plugin.registerEditorExtension(createEditorActionExtension({
@@ -178,7 +178,7 @@ export class EditorActionController {
     try {
       const range = editorActionCandidateReplacementRange(candidate);
       setEditorActionCandidate(editor, null);
-      editor.replaceRange(candidate.candidateText, editor.offsetToPos(range.fromOffset), editor.offsetToPos(range.toOffset), "codex-editor-action");
+      editor.replaceRange(candidate.candidateText, editor.offsetToPos(range.fromOffset), editor.offsetToPos(range.toOffset), "xy-editor-action");
       this.active = null;
       const message = confirmedActionMessage(candidate.actionId);
       this.plugin.getXiaoyuanView()?.setEditorActionStatus({ status: "confirmed", message });

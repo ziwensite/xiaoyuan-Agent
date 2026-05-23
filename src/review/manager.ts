@@ -1,7 +1,7 @@
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Notice, normalizePath } from "obsidian";
-import type CodexForObsidianPlugin from "../main";
+import type XiaoyuanPlugin from "../main";
 import type { ReviewReportKind, ReviewReportState } from "../settings/settings";
 import { normalizeReviewOutputDir } from "../settings/settings";
 import {
@@ -26,7 +26,7 @@ export class ReviewManager {
   private scheduleTimer: number | null = null;
   private running = false;
 
-  constructor(private readonly plugin: CodexForObsidianPlugin) {}
+  constructor(private readonly plugin: XiaoyuanPlugin) {}
 
   register(): void {
     this.plugin.addCommand({

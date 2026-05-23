@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import type { ChatMessage, CodexForObsidianSettings } from "../settings/settings";
+import type { ChatMessage, XiaoyuanSettings } from "../settings/settings";
 
 export const CURRENT_PLUGIN_ID = "codex-echoink";
 export const LEGACY_PLUGIN_IDS = ["obsidian-codex"];
@@ -83,7 +83,7 @@ export function prepareRawMessage(message: ChatMessage, fullText: string, thresh
   return { rawRef, text: fullText };
 }
 
-export async function externalizeLargeMessages(vaultPath: string, settings: CodexForObsidianSettings, pluginDir = CURRENT_PLUGIN_ID): Promise<number> {
+export async function externalizeLargeMessages(vaultPath: string, settings: XiaoyuanSettings, pluginDir = CURRENT_PLUGIN_ID): Promise<number> {
   let changed = 0;
   for (const session of settings.sessions) {
     for (const message of session.messages) {

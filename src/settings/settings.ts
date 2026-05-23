@@ -1,4 +1,4 @@
-import type { CodexModel, CodexPluginInfo, CodexSkill, McpServerStatus, PermissionMode, ProcessEventKind, ProcessFileRef, ReasoningEffort, ServiceTierChoice, TokenUsage, UiMode } from "../types/app-server";
+import type { ModelOption, PluginInfo, SkillSpec, McpServerStatus, PermissionMode, ProcessEventKind, ProcessFileRef, ReasoningEffort, ServiceTierChoice, TokenUsage, UiMode } from "../types/app-server";
 import type { AgentModelInfo, AgentProfileInfo } from "../agent/types";
 import { AGENTS_RULES_FILE, DEFAULT_KNOWLEDGE_BASE_RULES_FILE, LEGACY_CLAUDE_RULES_FILE } from "../knowledge-base/constants";
 import type { KnowledgeBaseCitationSummary } from "../knowledge-base/types";
@@ -205,15 +205,22 @@ export interface WorkspaceResourceCacheEntry<T> {
 }
 
 export interface WorkspaceResourceCache {
-  plugins?: WorkspaceResourceCacheEntry<CodexPluginInfo>;
+  plugins?: WorkspaceResourceCacheEntry<PluginInfo>;
   mcp?: WorkspaceResourceCacheEntry<McpServerStatus>;
-  skills?: WorkspaceResourceCacheEntry<CodexSkill>;
+  skills?: WorkspaceResourceCacheEntry<SkillSpec>;
 }
 
-export interface CodexForObsidianSettings {
+export interface SetupState {
+  completedAt: number;
+  lastCheckedAt: number;
+  dismissedVersion: string;
+}
+
+export interface XiaoyuanSettings {
   settingsVersion: number;
   settingsLanguage: SettingsLanguage;
   settingsTab: SettingsTab;
+  setup: SetupState;
   agentBackend: AgentBackendMode;
   assistantMode: AssistantMode;
   proxyEnabled: boolean;
@@ -400,10 +407,11 @@ export const DEFAULT_EDITOR_ACTION_MODE_CONFIGS: Record<EditorActionQualityMode,
   }
 };
 
-export const DEFAULT_SETTINGS: CodexForObsidianSettings = {
+export const DEFAULT_SETTINGS: XiaoyuanSettings = {
   settingsVersion: 27,
   settingsLanguage: "zh-CN",
   settingsTab: "general",
+  setup: { completedAt: 0, lastCheckedAt: 0, dismissedVersion: "" },
   agentBackend: "opencode",
   assistantMode: "opencode",
   proxyEnabled: false,
@@ -518,10 +526,10 @@ export const DEFAULT_SETTINGS: CodexForObsidianSettings = {
   activeSessionId: ""
 };
 
-export function normalizeSettingsData(data: any): { settings: CodexForObsidianSettings; changed: boolean } {
+export function normalizeSettingsData(data: any): { settings: XiaoyuanSettings; changed: boolean } {
   const previousVersion = typeof data?.settingsVersion === "number" ? data.settingsVersion : 0;
   const normalizedLanguage = normalizeSettingsLanguage(data?.settingsLanguage);
-  const settings: CodexForObsidianSettings = {
+  const settings: XiaoyuanSettings = {
     ...DEFAULT_SETTINGS,
     ...data,
     settingsLanguage: normalizedLanguage,
@@ -583,7 +591,7 @@ export function normalizeSettingsData(data: any): { settings: CodexForObsidianSe
   return { settings, changed: previousVersion !== DEFAULT_SETTINGS.settingsVersion || languageChanged };
 }
 
-export function getActiveApiProvider(settings: Pick<CodexForObsidianSettings, "activeApiProviderId" | "apiProviders">): ApiProviderConfig | null {
+export function getActiveApiProvider(settings: Pick<XiaoyuanSettings, "activeApiProviderId" | "apiProviders">): ApiProviderConfig | null {
   return settings.apiProviders.find((provider) => provider.id === settings.activeApiProviderId) ?? null;
 }
 
@@ -606,7 +614,7 @@ export function validateApiProvider(provider: Pick<ApiProviderConfig, "name" | "
   return errors;
 }
 
-export function removeApiProvider(settings: Pick<CodexForObsidianSettings, "activeApiProviderId" | "apiProviders">, providerId: string): boolean {
+export function removeApiProvider(settings: Pick<XiaoyuanSettings, "activeApiProviderId" | "apiProviders">, providerId: string): boolean {
   const index = settings.apiProviders.findIndex((provider) => provider.id === providerId);
   if (index < 0) return false;
   const wasActive = settings.activeApiProviderId === providerId;
@@ -624,7 +632,7 @@ export function isKnowledgeBaseSession(session: Pick<StoredSession, "kind" | "ti
 }
 
 export function ensureKnowledgeBaseSession(
-  settings: Pick<CodexForObsidianSettings, "sessions" | "knowledgeBase" | "activeSessionId">,
+  settings: Pick<XiaoyuanSettings, "sessions" | "knowledgeBase" | "activeSessionId">,
   cwd: string,
   idFactory: () => string = () => newId("session")
 ): StoredSession {
@@ -654,7 +662,7 @@ export function ensureKnowledgeBaseSession(
 }
 
 export function clearLegacyChatWorkspaceDefaults(
-  settings: Pick<CodexForObsidianSettings, "sessions" | "knowledgeBase">,
+  settings: Pick<XiaoyuanSettings, "sessions" | "knowledgeBase">,
   vaultPath: string,
   previousVersion: number
 ): number {
@@ -674,15 +682,15 @@ export function clearLegacyChatWorkspaceDefaults(
   return changed;
 }
 
-export function providerConnectionLabel(settings: Pick<CodexForObsidianSettings, "activeApiProviderId" | "apiProviders">, language: SettingsLanguage = "zh-CN"): string {
+export function providerConnectionLabel(settings: Pick<XiaoyuanSettings, "activeApiProviderId" | "apiProviders">, language: SettingsLanguage = "zh-CN"): string {
   const provider = getActiveApiProvider(settings);
   if (!provider) return language === "en" ? "Custom API not configured" : "自定义 API 未配置";
   return language === "en" ? `Custom API: ${provider.name} · ${providerModelLabel(provider, language)}` : `自定义 API：${provider.name} · ${providerModelLabel(provider, language)}`;
 }
 
-export function ensureModelChoices(models: CodexModel[], ...preferredModels: Array<string | null | undefined>): CodexModel[] {
+export function ensureModelChoices(models: ModelOption[], ...preferredModels: Array<string | null | undefined>): ModelOption[] {
   const seen = new Set(models.map((item) => item.model));
-  const preferred: CodexModel[] = [];
+  const preferred: ModelOption[] = [];
   for (const value of preferredModels) {
     const model = typeof value === "string" ? value.trim() : "";
     if (!model || seen.has(model)) continue;
@@ -851,7 +859,7 @@ export function hasResourceOverrides(overrides: Record<string, boolean> | undefi
   return Boolean(overrides && Object.keys(overrides).length > 0);
 }
 
-export function filterEnabledSkills(skills: CodexSkill[], overrides: Record<string, boolean> | undefined): CodexSkill[] {
+export function filterEnabledSkills(skills: SkillSpec[], overrides: Record<string, boolean> | undefined): SkillSpec[] {
   return skills.filter((skill) => resourceEnabled(overrides, skill.path || skill.name, skill.enabled !== false));
 }
 
@@ -1357,12 +1365,12 @@ function normalizeNonNegativeNumber(value: any): number {
   return number;
 }
 
-function normalizeApiProviderSelection(settings: Pick<CodexForObsidianSettings, "providerMode" | "activeApiProviderId" | "apiProviders">): void {
+function normalizeApiProviderSelection(settings: Pick<XiaoyuanSettings, "providerMode" | "activeApiProviderId" | "apiProviders">): void {
   const active = getActiveApiProvider(settings);
   if (active) return;
   const first = settings.apiProviders[0];
   settings.activeApiProviderId = first?.id ?? "";
-  if (settings.providerMode === "custom-api" && !first) settings.providerMode = "codex-login";
+  if (settings.providerMode === "custom-api" && !first) settings.providerMode = "custom-api";
 }
 
 function normalizeApiProviders(value: any): ApiProviderConfig[] {
@@ -1441,7 +1449,7 @@ function normalizeCacheEntry<T>(value: any, normalizeItem: (item: any) => T | nu
   return { fetchedAt, items, ...(error ? { error } : {}) };
 }
 
-function normalizeCachedPlugin(item: any): CodexPluginInfo | null {
+function normalizeCachedPlugin(item: any): PluginInfo | null {
   const id = typeof item?.id === "string" ? item.id : "";
   if (!id) return null;
   return {
@@ -1456,7 +1464,7 @@ function normalizeCachedPlugin(item: any): CodexPluginInfo | null {
   };
 }
 
-function normalizeCachedSkill(item: any): CodexSkill | null {
+function normalizeCachedSkill(item: any): SkillSpec | null {
   const name = typeof item?.name === "string" ? item.name : "";
   const path = typeof item?.path === "string" ? item.path : "";
   if (!name || !path) return null;

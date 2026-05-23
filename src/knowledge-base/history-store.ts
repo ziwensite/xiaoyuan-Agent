@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { pluginDataDir, rawStorageDir } from "../core/raw-message-store";
-import { isKnowledgeBaseSession, type ChatMessage, type CodexForObsidianSettings, type StoredSession } from "../settings/settings";
+import { isKnowledgeBaseSession, type ChatMessage, type XiaoyuanSettings, type StoredSession } from "../settings/settings";
 
 export const KNOWLEDGE_BASE_HISTORY_VERSION = 1;
 export const KNOWLEDGE_BASE_ACTIVE_DAY_MESSAGE_LIMIT = 1000;
@@ -131,7 +131,7 @@ export function compactKnowledgeBaseMessagesToActiveDay(session: StoredSession, 
 export async function migrateKnowledgeBaseHistory(
   vaultPath: string,
   pluginDir: string,
-  settings: CodexForObsidianSettings
+  settings: XiaoyuanSettings
 ): Promise<KnowledgeBaseHistoryMutationResult> {
   const session = settings.sessions.find((item) => isKnowledgeBaseSession(item, settings.knowledgeBase.sessionId));
   if (!session) return { changed: false, messageCount: 0, activeDate: "" };
@@ -156,7 +156,7 @@ export async function migrateKnowledgeBaseHistory(
 export async function persistAndCompactKnowledgeBaseHistory(
   vaultPath: string,
   pluginDir: string,
-  settings: CodexForObsidianSettings,
+  settings: XiaoyuanSettings,
   now = Date.now()
 ): Promise<KnowledgeBaseHistoryMutationResult> {
   const session = settings.sessions.find((item) => isKnowledgeBaseSession(item, settings.knowledgeBase.sessionId));
@@ -281,7 +281,7 @@ export async function exportKnowledgeBaseHistory(vaultPath: string, pluginDir: s
     }
     sessions.push({ ...session, days });
   }
-  const relative = `${outputDir.replace(/^\/+|\/+$/g, "")}/codex-echoink-history-export-${localDateKeyForTimestamp(Date.now())}-${Date.now()}.json`;
+  const relative = `${outputDir.replace(/^\/+|\/+$/g, "")}/xy-history-export-${localDateKeyForTimestamp(Date.now())}-${Date.now()}.json`;
   const absolute = path.join(vaultPath, relative);
   await writeJsonAtomic(absolute, { version: KNOWLEDGE_BASE_HISTORY_VERSION, exportedAt: Date.now(), sessions });
   return relative.replace(/\\/g, "/");

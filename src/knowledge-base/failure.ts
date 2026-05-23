@@ -1,4 +1,4 @@
-export function formatKnowledgeBaseCodexFailureSignal(method: string, params: any, fallbackMessage: string): string {
+export function formatKnowledgeBaseFailureSignal(method: string, params: any, fallbackMessage: string): string {
   const status = firstString(params?.turn?.status, params?.status, params?.error?.status, params?.turn?.error?.status);
   const code = firstString(params?.code, params?.error?.code, params?.turn?.error?.code, params?.exitCode);
   const signal = firstString(params?.signal);

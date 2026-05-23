@@ -114,7 +114,7 @@ class RequestInputModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "Codex 需要你的选择" });
+    contentEl.createEl("h2", { text: "需要你的选择" });
     for (const question of this.questions) {
       const options = Array.isArray(question.options) ? question.options : [];
       const setting = new Setting(contentEl).setName(question.header || question.question).setDesc(question.question || "");

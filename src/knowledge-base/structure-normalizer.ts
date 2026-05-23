@@ -200,7 +200,7 @@ async function uniqueTempSibling(fromAbs: string): Promise<string> {
   const dir = path.dirname(fromAbs);
   const base = path.basename(fromAbs);
   for (let index = 0; index < 20; index += 1) {
-    const candidate = path.join(dir, `.codex-rename-${Date.now()}-${index}-${base}`);
+    const candidate = path.join(dir, `.xy-rename-${Date.now()}-${index}-${base}`);
     if (!await exists(candidate)) return candidate;
   }
   throw new Error(`无法创建临时重命名路径：${fromAbs}`);

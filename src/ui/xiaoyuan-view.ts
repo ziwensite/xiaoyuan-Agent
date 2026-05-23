@@ -1,11 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import { ItemView, MarkdownView, Menu, Modal, normalizePath, Notice, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
-import type CodexForObsidianPlugin from "../main";
+import type XiaoyuanPlugin from "../main";
 import type { ChatMessage, DiffSummary, StoredAttachment, StoredSession } from "../settings/settings";
-import { DEFAULT_SETTINGS, ensureKnowledgeBaseSession, filterEnabledSkills, getActiveApiProvider, getApiProviderModels, isKnowledgeBaseSession, newId, providerConnectionLabel, resolveEditorActionModeConfig } from "../settings/settings";
+import { DEFAULT_SETTINGS, ensureKnowledgeBaseSession, ensureModelChoices, filterEnabledSkills, getActiveApiProvider, getApiProviderModels, isKnowledgeBaseSession, newId, providerConnectionLabel, resolveEditorActionModeConfig } from "../settings/settings";
 import type {
-  CodexSkill,
+  BackendNotification,
+  SkillSpec,
   McpServerStatus,
   PermissionMode,
   ProcessFileRef,
@@ -15,6 +16,7 @@ import type {
   TokenUsage,
   UiMode
 } from "../types/app-server";
+import { diagnoseOpenCodeError, type OpenCodeErrorDiagnostic } from "../core/opencode-diagnostics";
 import { extractClipboardImageFiles, saveClipboardImageAttachments } from "../core/clipboard-images";
 import { buildDiffSummary, diffSummaryLabel, parseFileChangeDiff, serializeFileChanges, type ParsedDiffFile } from "../core/diff-summary";
 import { basename, buildUserInput, contextUsageView, filterSkills, getSlashQuery, normalizeProcessFileRef, processGroupStateId, reasoningTextFromPayload, summarizeProcessEvent } from "../core/mapping";
@@ -110,7 +112,7 @@ export class XiaoyuanView extends ItemView {
   private virtualSessionId = "";
   private virtualRowHeights = new Map<string, number>();
   private rawTextCache = new Map<string, string>();
-  private selectedSkill: CodexSkill | null = null;
+  private selectedSkill: SkillSpec | null = null;
   private attachments: StoredAttachment[] = [];
   private selectedModel = "";
   private selectedReasoning: ReasoningEffort;
@@ -146,7 +148,7 @@ export class XiaoyuanView extends ItemView {
   private knowledgeDashboardError = "";
   private knowledgeDashboardRequestId = 0;
 
-  constructor(leaf: WorkspaceLeaf, private readonly plugin: CodexForObsidianPlugin) {
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: XiaoyuanPlugin) {
     super(leaf);
     this.selectedModel = plugin.settings.defaultModel;
     this.selectedReasoning = plugin.settings.defaultReasoning;
@@ -182,8 +184,8 @@ export class XiaoyuanView extends ItemView {
     this.clearTurnWatchdog();
     this.clearEditorActionStatusTimers();
     this.clearEditorSummaryTimers();
-    this.rejectEditorActionRun(new Error("Codex 侧栏已关闭"));
-    this.rejectEditorSummaryRun(new Error("Codex 侧栏已关闭"));
+    this.rejectEditorActionRun(new Error("OpenCode 侧栏已关闭"));
+    this.rejectEditorSummaryRun(new Error("OpenCode 侧栏已关闭"));
     await this.plugin.saveSettings(true);
   }
 
@@ -218,8 +220,8 @@ export class XiaoyuanView extends ItemView {
     void this.refreshKnowledgeDashboard(true);
   }
 
-  private diagnoseCodexFailure(error: unknown, model = this.effectiveModel()): CodexErrorDiagnostic {
-    return diagnoseCodexError(error, {
+  private diagnoseOpenCodeFailure(error: unknown, model = this.effectiveModel()): OpenCodeErrorDiagnostic {
+    return diagnoseOpenCodeError(error, {
       model,
       providerLabel: providerConnectionLabel(this.plugin.settings),
       proxyEnabled: this.plugin.settings.proxyEnabled,
@@ -227,7 +229,7 @@ export class XiaoyuanView extends ItemView {
     });
   }
 
-  handleCodexNotification(notification: CodexNotification): void {
+  handleOpenCodeNotification(notification: BackendNotification): void {
     const { method, params } = notification;
     if (this.handleEditorActionNotification(method, params)) return;
     if (method === "turn/started") {
@@ -249,11 +251,11 @@ export class XiaoyuanView extends ItemView {
       const failed = params?.turn?.status === "failed";
       if (this.editorActionRun?.runId === this.activeRunId) {
         if (failed) {
-          this.rejectEditorActionRun(new Error("Codex 写作任务失败"));
+          this.rejectEditorActionRun(new Error("OpenCode 写作任务失败"));
         } else if (this.editorActionRun.text.trim()) {
           this.resolveEditorActionRun(this.editorActionRun.text);
         } else {
-          this.rejectEditorActionRun(new Error("Codex 没有返回候选文本"));
+          this.rejectEditorActionRun(new Error("OpenCode 没有返回候选文本"));
         }
       }
       this.running = false;
@@ -331,12 +333,12 @@ export class XiaoyuanView extends ItemView {
       return;
     }
     if (method === "item/completed" && params?.item) {
-      void this.renderCompletedItem(this.activeRunSession(), params.item).catch((error) => console.error("Codex item render failed", error));
+      void this.renderCompletedItem(this.activeRunSession(), params.item).catch((error) => console.error("OpenCode item render failed", error));
       return;
     }
     if (method === "error") {
       const session = this.activeRunSession();
-      const diagnostic = this.diagnoseCodexFailure(params?.message ?? "Codex 出错了");
+      const diagnostic = this.diagnoseOpenCodeFailure(params?.message ?? "OpenCode 出错了");
       if (this.editorActionRun?.runId === this.activeRunId) this.rejectEditorActionRun(new Error(diagnostic.text));
       this.running = false;
       this.activeTurnId = "";
@@ -372,11 +374,11 @@ export class XiaoyuanView extends ItemView {
     if (method === "turn/completed") {
       const failed = params?.turn?.status === "failed";
       if (failed) {
-        this.rejectEditorActionRun(new Error("Codex 写作任务失败"));
+        this.rejectEditorActionRun(new Error("OpenCode 写作任务失败"));
       } else if (this.editorActionRun?.text.trim()) {
         this.resolveEditorActionRun(this.editorActionRun.text);
       } else {
-        this.rejectEditorActionRun(new Error("Codex 没有返回候选文本"));
+        this.rejectEditorActionRun(new Error("OpenCode 没有返回候选文本"));
       }
       this.running = false;
       this.activeTurnId = "";
@@ -390,7 +392,7 @@ export class XiaoyuanView extends ItemView {
       return true;
     }
     if (method === "error") {
-      this.rejectEditorActionRun(new Error(this.diagnoseCodexFailure(params?.message ?? "Codex 出错了").text));
+      this.rejectEditorActionRun(new Error(this.diagnoseOpenCodeFailure(params?.message ?? "OpenCode 出错了").text));
       this.running = false;
       this.activeTurnId = "";
       this.clearTurnWatchdog();
@@ -434,7 +436,7 @@ export class XiaoyuanView extends ItemView {
     }
     if (method === "error") {
       const runId = this.editorSummaryRun?.runId;
-      this.rejectEditorSummaryRun(new Error(this.diagnoseCodexFailure(params?.message ?? "摘要生成失败").text));
+      this.rejectEditorSummaryRun(new Error(this.diagnoseOpenCodeFailure(params?.message ?? "摘要生成失败").text));
       this.releaseEditorSummaryRunLock(runId);
       return true;
     }
@@ -450,21 +452,21 @@ export class XiaoyuanView extends ItemView {
 
   private render(): void {
     this.contentEl.empty();
-    this.rootEl = this.contentEl.createDiv({ cls: "codex-container" });
+    this.rootEl = this.contentEl.createDiv({ cls: "xy-container" });
 
-    const header = this.rootEl.createDiv({ cls: "codex-header" });
-    const title = header.createDiv({ cls: "codex-title" });
-    const icon = title.createSpan({ cls: "codex-title-icon codex-title-icon-codex", attr: { "aria-hidden": "true" } });
+    const header = this.rootEl.createDiv({ cls: "xy-header" });
+    const title = header.createDiv({ cls: "xy-title" });
+    const icon = title.createSpan({ cls: "xy-title-icon xy-title-icon-opencode", attr: { "aria-hidden": "true" } });
     setIcon(icon, "bot");
-    title.createSpan({ cls: "codex-title-text", text: "小元" });
-    const headerActions = header.createDiv({ cls: "codex-header-actions" });
+    title.createSpan({ cls: "xy-title-text", text: "小元" });
+    const headerActions = header.createDiv({ cls: "xy-header-actions" });
     this.editorActionStatusEl = headerActions.createDiv({
-      cls: "codex-status-chip codex-editor-action-status is-idle",
+      cls: "xy-status-chip xy-editor-action-status is-idle",
       attr: { role: "button", tabindex: "0", "aria-label": "写作上下文" }
     });
-    const editorActionIcon = this.editorActionStatusEl.createSpan({ cls: "codex-header-status-icon" });
+    const editorActionIcon = this.editorActionStatusEl.createSpan({ cls: "xy-header-status-icon" });
     setIcon(editorActionIcon, "wand-sparkles");
-    this.editorActionStatusTextEl = this.editorActionStatusEl.createSpan({ cls: "codex-header-status-text", text: "写作" });
+    this.editorActionStatusTextEl = this.editorActionStatusEl.createSpan({ cls: "xy-header-status-text", text: "写作" });
     this.editorActionStatusEl.onclick = (event) => {
       event.stopPropagation();
       this.articleUnderstandingPanelVisible = !this.articleUnderstandingPanelVisible;
@@ -479,30 +481,30 @@ export class XiaoyuanView extends ItemView {
       this.renderArticleUnderstandingPanel();
     };
     this.headerHistoryEl = headerActions.createEl("button", {
-      cls: "codex-status-chip codex-header-history is-hidden",
+      cls: "xy-status-chip xy-header-history is-hidden",
       attr: { type: "button", title: "查看知识库历史", "aria-label": "查看知识库历史" }
     });
-    const historyIcon = this.headerHistoryEl.createSpan({ cls: "codex-header-status-icon" });
+    const historyIcon = this.headerHistoryEl.createSpan({ cls: "xy-header-status-icon" });
     setIcon(historyIcon, "history");
-    this.headerHistoryEl.createSpan({ cls: "codex-header-status-text", text: "历史" });
+    this.headerHistoryEl.createSpan({ cls: "xy-header-status-text", text: "历史" });
     this.headerHistoryEl.onclick = (event) => {
       event.stopPropagation();
       const session = this.ensureSession();
       if (!this.isKnowledgeBaseSession(session)) return;
       void this.openKnowledgeBaseHistory(session);
     };
-    this.headerStatusEl = headerActions.createDiv({ cls: "codex-header-status codex-status-chip" });
-    const statusIcon = this.headerStatusEl.createSpan({ cls: "codex-header-status-icon" });
+    this.headerStatusEl = headerActions.createDiv({ cls: "xy-header-status xy-status-chip" });
+    const statusIcon = this.headerStatusEl.createSpan({ cls: "xy-header-status-icon" });
     setIcon(statusIcon, "activity");
-    this.headerStatusTextEl = this.headerStatusEl.createSpan({ cls: "codex-header-status-text", text: "连接中" });
+    this.headerStatusTextEl = this.headerStatusEl.createSpan({ cls: "xy-header-status-text", text: "连接中" });
 
     this.headerUsageEl = headerActions.createEl("button", {
-      cls: "codex-status-chip codex-usage-chip",
+      cls: "xy-status-chip xy-usage-chip",
       attr: { type: "button", "aria-label": "用量", title: "用量" }
     });
-    const usageIcon = this.headerUsageEl.createSpan({ cls: "codex-header-status-icon" });
+    const usageIcon = this.headerUsageEl.createSpan({ cls: "xy-header-status-icon" });
     setIcon(usageIcon, "gauge");
-    this.headerUsageTextEl = this.headerUsageEl.createSpan({ cls: "codex-header-status-text", text: "用量 --" });
+    this.headerUsageTextEl = this.headerUsageEl.createSpan({ cls: "xy-header-status-text", text: "用量 --" });
     this.headerUsageEl.onclick = async (event) => {
       event.stopPropagation();
       const willShow = !this.usagePanelEl.hasClass("is-visible");
@@ -511,35 +513,35 @@ export class XiaoyuanView extends ItemView {
     };
 
     const resourceButton = headerActions.createEl("button", {
-      cls: "codex-icon-button codex-resource-button",
+      cls: "xy-icon-button xy-resource-button",
       attr: { type: "button", "aria-label": "插件 MCP Skills 管理", title: "插件 / MCP / Skills 管理" }
     });
     setIcon(resourceButton, "blocks");
     resourceButton.onclick = () => void this.plugin.openWorkspaceResourceSettings("plugins");
 
     const settingsButton = headerActions.createEl("button", {
-      cls: "codex-icon-button codex-settings-button",
+      cls: "xy-icon-button xy-settings-button",
       attr: { type: "button", "aria-label": "打开插件设置", title: "打开插件设置" }
     });
     renderSettingsGearIcon(settingsButton);
     settingsButton.onclick = () => this.openPluginSettings();
 
-    this.usagePanelEl = header.createDiv({ cls: "codex-usage-panel" });
-    this.articleUnderstandingPanelEl = header.createDiv({ cls: "codex-article-panel" });
+    this.usagePanelEl = header.createDiv({ cls: "xy-usage-panel" });
+    this.articleUnderstandingPanelEl = header.createDiv({ cls: "xy-article-panel" });
     this.registerDomEvent(document, "click", (event) => {
       if (!this.rootEl.contains(event.target as Node)) this.usagePanelEl.removeClass("is-visible");
     });
 
-    this.tabBarEl = this.rootEl.createDiv({ cls: "codex-tabs" });
-    this.knowledgeDashboardEl = this.rootEl.createDiv({ cls: "codex-kb-dashboard" });
-    this.messagesEl = this.rootEl.createDiv({ cls: "codex-messages" });
-    this.virtualListEl = this.messagesEl.createDiv({ cls: "codex-virtual-list" });
+    this.tabBarEl = this.rootEl.createDiv({ cls: "xy-tabs" });
+    this.knowledgeDashboardEl = this.rootEl.createDiv({ cls: "xy-kb-dashboard" });
+    this.messagesEl = this.rootEl.createDiv({ cls: "xy-messages" });
+    this.virtualListEl = this.messagesEl.createDiv({ cls: "xy-virtual-list" });
     this.registerDomEvent(this.messagesEl, "scroll", () => this.scheduleRenderMessages({ fromScroll: true }));
 
-    const inputWrap = this.rootEl.createDiv({ cls: "codex-input-wrap" });
-    this.attachmentsEl = inputWrap.createDiv({ cls: "codex-attachments" });
+    const inputWrap = this.rootEl.createDiv({ cls: "xy-input-wrap" });
+    this.attachmentsEl = inputWrap.createDiv({ cls: "xy-attachments" });
     this.inputEl = inputWrap.createEl("textarea", {
-      cls: "codex-input",
+      cls: "xy-input",
       attr: { placeholder: "问 小元，让它管理当前 Obsidian 仓库" }
     });
     this.inputEl.addEventListener("input", () => this.onInputChanged());
@@ -563,9 +565,9 @@ export class XiaoyuanView extends ItemView {
       this.handleDroppedFiles(event);
     });
 
-    this.skillMenuEl = inputWrap.createDiv({ cls: "codex-skill-menu" });
-    this.toolbarEl = inputWrap.createDiv({ cls: "codex-toolbar" });
-    this.mcpPanelEl = this.rootEl.createDiv({ cls: "codex-mcp-panel" });
+    this.skillMenuEl = inputWrap.createDiv({ cls: "xy-skill-menu" });
+    this.toolbarEl = inputWrap.createDiv({ cls: "xy-toolbar" });
+    this.mcpPanelEl = this.rootEl.createDiv({ cls: "xy-mcp-panel" });
     this.renderToolbar();
     this.updateInputPlaceholder();
     this.renderEditorActionStatus();
@@ -648,12 +650,12 @@ export class XiaoyuanView extends ItemView {
 
     const state = this.articleUnderstandingPanelState;
     const modeConfig = resolveEditorActionModeConfig(settings, state.mode ?? settings.qualityMode);
-    const title = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-title" });
-    const titleIcon = title.createSpan({ cls: "codex-usage-panel-icon" });
+    const title = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-title" });
+    const titleIcon = title.createSpan({ cls: "xy-usage-panel-icon" });
     setIcon(titleIcon, "file-search");
     title.createSpan({ text: "写作上下文" });
 
-    const meta = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-meta" });
+    const meta = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-meta" });
     this.addArticlePanelRow(meta, "文件", state.source?.fileName ?? "当前未选择笔记");
     this.addArticlePanelRow(meta, "模式", state.modeLabel ?? modeConfig.label);
     this.addArticlePanelRow(meta, "模型", state.model ?? modeConfig.model);
@@ -661,20 +663,20 @@ export class XiaoyuanView extends ItemView {
     this.addArticlePanelRow(meta, "更新时间", state.entry?.updatedAt ? formatRelativeTime(state.entry.updatedAt) : "无");
     this.addArticlePanelRow(meta, "本次使用", state.usedInLastRun ? "已使用文章理解" : "未使用文章理解");
 
-    const body = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-body" });
+    const body = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-body" });
     if (state.entry?.understanding) {
       renderRichText(this.plugin.app, this, body, state.entry.understanding);
     } else if (state.mode === "fast" || settings.qualityMode === "fast") {
-      body.createDiv({ cls: "codex-article-panel-empty", text: "快速模式写作时不使用文章理解；也可以手动刷新，先建立可见上下文。" });
+      body.createDiv({ cls: "xy-article-panel-empty", text: "快速模式写作时不使用文章理解；也可以手动刷新，先建立可见上下文。" });
     } else {
-      body.createDiv({ cls: "codex-article-panel-empty", text: "还没有文章理解。点击刷新理解，或直接使用质量/严格写作触发。" });
+      body.createDiv({ cls: "xy-article-panel-empty", text: "还没有文章理解。点击刷新理解，或直接使用质量/严格写作触发。" });
     }
 
-    const actions = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-actions" });
-    const refresh = actions.createEl("button", { cls: "codex-resource-refresh", text: "刷新理解", attr: { type: "button" } });
+    const actions = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-actions" });
+    const refresh = actions.createEl("button", { cls: "xy-resource-refresh", text: "刷新理解", attr: { type: "button" } });
     refresh.disabled = state.status === "running";
     refresh.onclick = () => void this.refreshArticleUnderstandingFromPanel();
-    const clear = actions.createEl("button", { cls: "codex-resource-tab", text: "清除理解", attr: { type: "button" } });
+    const clear = actions.createEl("button", { cls: "xy-resource-tab", text: "清除理解", attr: { type: "button" } });
     clear.disabled = !state.source?.filePath && !state.entry?.filePath;
     clear.onclick = async () => {
       const filePath = state.source?.filePath ?? state.entry?.filePath;
@@ -684,7 +686,7 @@ export class XiaoyuanView extends ItemView {
       await this.plugin.saveSettings();
       this.renderEditorActionStatus();
     };
-    const settingsButton = actions.createEl("button", { cls: "codex-resource-tab", text: "打开设置", attr: { type: "button" } });
+    const settingsButton = actions.createEl("button", { cls: "xy-resource-tab", text: "打开设置", attr: { type: "button" } });
     settingsButton.onclick = async () => {
       this.plugin.settings.settingsTab = "editorActions";
       await this.plugin.saveSettings();
@@ -693,9 +695,9 @@ export class XiaoyuanView extends ItemView {
   }
 
   private addArticlePanelRow(container: HTMLElement, label: string, value: string): void {
-    const row = container.createDiv({ cls: "codex-article-panel-row" });
-    row.createSpan({ cls: "codex-article-panel-label", text: label });
-    row.createSpan({ cls: "codex-article-panel-value", text: value });
+    const row = container.createDiv({ cls: "xy-article-panel-row" });
+    row.createSpan({ cls: "xy-article-panel-label", text: label });
+    row.createSpan({ cls: "xy-article-panel-value", text: value });
   }
 
   private clearEditorActionStatusTimers(): void {
@@ -719,14 +721,14 @@ export class XiaoyuanView extends ItemView {
 
     const status = await this.plugin.ensureOpenCodeConnected();
     if (requestId !== this.usageRequestId) return;
-    if (!status.connected || !this.plugin.codex) {
+    if (!status.connected || !this.plugin.openCode) {
       this.usageLoading = false;
-      this.usageError = "Codex 未连接";
+      this.usageError = "OpenCode 未连接";
       this.updateUsageHeader(null, false, this.usageError);
       this.renderUsagePanel(null, this.usageError, false);
       return;
     }
-    const result = await this.plugin.codex.refreshRateLimits();
+    const result = await this.plugin.openCode.refreshRateLimits();
     if (requestId !== this.usageRequestId) return;
     const nextRateLimits = result.rateLimits ?? this.plugin.lastStatus?.rateLimits ?? null;
     const nextRateLimitsByLimitId = result.rateLimitsByLimitId ?? this.plugin.lastStatus?.rateLimitsByLimitId ?? null;
@@ -747,7 +749,7 @@ export class XiaoyuanView extends ItemView {
     if (!this.headerUsageTextEl) return;
     const usage = formatRateLimitUsage(rateLimits);
     this.headerUsageTextEl.setText(loading && !rateLimits ? "读取中" : usage.summary);
-    this.headerUsageEl.setAttr("title", loading ? "正在读取 Codex 用量" : error && !rateLimits ? `读取失败：${error}` : usage.title);
+    this.headerUsageEl.setAttr("title", loading ? "正在读取用量" : error && !rateLimits ? `读取失败：${error}` : usage.title);
     this.headerUsageEl.toggleClass("is-loading", loading);
     this.headerUsageEl.toggleClass("has-warning", Boolean(error && !rateLimits) || (!rateLimits && !loading));
     this.headerUsageEl.toggleClass("is-ok", Boolean(rateLimits && !error && !loading));
@@ -757,33 +759,33 @@ export class XiaoyuanView extends ItemView {
     if (!this.usagePanelEl) return;
     const usage = formatRateLimitUsage(rateLimits);
     this.usagePanelEl.empty();
-    const title = this.usagePanelEl.createDiv({ cls: "codex-usage-panel-title" });
-    const icon = title.createSpan({ cls: "codex-usage-panel-icon" });
+    const title = this.usagePanelEl.createDiv({ cls: "xy-usage-panel-title" });
+    const icon = title.createSpan({ cls: "xy-usage-panel-icon" });
     setIcon(icon, "gauge");
     title.createSpan({ text: "剩余额度" });
     if (!usage.primary && !usage.secondary) {
       if (loading) {
-        this.usagePanelEl.createDiv({ cls: "codex-usage-loading", text: "正在读取 Codex 用量..." });
+        this.usagePanelEl.createDiv({ cls: "xy-usage-loading", text: "正在读取用量..." });
         return;
       }
       if (error) {
-        this.usagePanelEl.createDiv({ cls: "codex-usage-error", text: `读取失败：${error}` });
+        this.usagePanelEl.createDiv({ cls: "xy-usage-error", text: `读取失败：${error}` });
         return;
       }
-      this.usagePanelEl.createDiv({ cls: "codex-usage-empty", text: "暂未读取到 Codex 用量。" });
+      this.usagePanelEl.createDiv({ cls: "xy-usage-empty", text: "暂未读取到用量。" });
       return;
     }
     if (usage.primary) this.renderUsageRow(usage.primary);
     if (usage.secondary) this.renderUsageRow(usage.secondary);
-    if (loading) this.usagePanelEl.createDiv({ cls: "codex-usage-loading", text: "正在更新..." });
-    if (error) this.usagePanelEl.createDiv({ cls: "codex-usage-error", text: `更新失败：${error}` });
+    if (loading) this.usagePanelEl.createDiv({ cls: "xy-usage-loading", text: "正在更新..." });
+    if (error) this.usagePanelEl.createDiv({ cls: "xy-usage-error", text: `更新失败：${error}` });
   }
 
   private renderUsageRow(item: RateLimitWindowView): void {
-    const row = this.usagePanelEl.createDiv({ cls: "codex-usage-row" });
-    row.createDiv({ cls: "codex-usage-label", text: item.label });
-    row.createDiv({ cls: "codex-usage-percent", text: `${item.remainingPercent}%` });
-    row.createDiv({ cls: "codex-usage-reset", text: item.resetLabel });
+    const row = this.usagePanelEl.createDiv({ cls: "xy-usage-row" });
+    row.createDiv({ cls: "xy-usage-label", text: item.label });
+    row.createDiv({ cls: "xy-usage-percent", text: `${item.remainingPercent}%` });
+    row.createDiv({ cls: "xy-usage-reset", text: item.resetLabel });
   }
 
   private openPluginSettings(): void {
@@ -804,7 +806,7 @@ export class XiaoyuanView extends ItemView {
       const knowledgeSession = isKnowledgeBaseSession(session, this.plugin.settings.knowledgeBase.sessionId);
       if (!knowledgeSession) chatIndex += 1;
       const tab = this.tabBarEl.createEl("button", {
-        cls: `codex-tab ${session.id === this.plugin.settings.activeSessionId ? "is-active" : ""} ${knowledgeSession ? "is-knowledge-base" : ""}`.trim(),
+        cls: `xy-tab ${session.id === this.plugin.settings.activeSessionId ? "is-active" : ""} ${knowledgeSession ? "is-knowledge-base" : ""}`.trim(),
         text: knowledgeSession ? "知识库" : String(chatIndex),
         attr: { type: "button", title: knowledgeSession ? "知识库管理（常驻）" : (session.title || "新会话") }
       });
@@ -829,7 +831,7 @@ export class XiaoyuanView extends ItemView {
         void this.renameSession(session);
       };
     });
-    const newButton = this.tabBarEl.createEl("button", { cls: "codex-tab-new", attr: { type: "button", "aria-label": "新建会话" } });
+    const newButton = this.tabBarEl.createEl("button", { cls: "xy-tab-new", attr: { type: "button", "aria-label": "新建会话" } });
     setIcon(newButton, "plus");
     newButton.onclick = async () => {
       this.createSession();
@@ -860,16 +862,16 @@ export class XiaoyuanView extends ItemView {
     this.virtualListEl.empty();
     if (messages.length === 0) {
       this.virtualListEl.style.height = "100%";
-      const welcome = this.virtualListEl.createDiv({ cls: "codex-welcome" });
-      welcome.createDiv({ cls: "codex-welcome-title", text: knowledgeSession ? "知识库管理" : "What's new?" });
+      const welcome = this.virtualListEl.createDiv({ cls: "xy-welcome" });
+      welcome.createDiv({ cls: "xy-welcome-title", text: knowledgeSession ? "知识库管理" : "What's new?" });
       if (knowledgeSession) {
-        welcome.createDiv({ cls: "codex-resource-note", text: hiddenCount ? `当前页面已清空，隐藏 ${hiddenCount} 条本地历史；输入 /history 查看。` : "输入 /help 查看命令；也可以直接说只体检一下、维护知识库、写周报、收集这个链接。" });
+        welcome.createDiv({ cls: "xy-resource-note", text: hiddenCount ? `当前页面已清空，隐藏 ${hiddenCount} 条本地历史；输入 /history 查看。` : "输入 /help 查看命令；也可以直接说只体检一下、维护知识库、写周报、收集这个链接。" });
         if (hiddenCount) {
-          const historyButton = welcome.createEl("button", { cls: "codex-kb-history-inline-button", text: "查看历史", attr: { type: "button" } });
+          const historyButton = welcome.createEl("button", { cls: "xy-kb-history-inline-button", text: "查看历史", attr: { type: "button" } });
           historyButton.onclick = () => this.openKnowledgeBaseHistory(session);
         }
       } else if (!session.cwd) {
-        welcome.createDiv({ cls: "codex-resource-note", text: "普通会话需要先选择工作区；添加笔记只作为本轮上下文。" });
+        welcome.createDiv({ cls: "xy-resource-note", text: "普通会话需要先选择工作区；添加笔记只作为本轮上下文。" });
       }
       return;
     }
@@ -888,7 +890,7 @@ export class XiaoyuanView extends ItemView {
     for (const virtualRow of virtual.rows) {
       const row = rows[virtualRow.index];
       if (!row) continue;
-      const rowEl = this.virtualListEl.createDiv({ cls: `codex-virtual-row codex-virtual-row-${row.kind}` });
+      const rowEl = this.virtualListEl.createDiv({ cls: `xy-virtual-row xy-virtual-row-${row.kind}` });
       rowEl.dataset.rowId = virtualRow.id;
       rowEl.dataset.index = String(virtualRow.index);
       rowEl.style.transform = `translateY(${virtualRow.top}px)`;
@@ -920,13 +922,13 @@ export class XiaoyuanView extends ItemView {
     this.knowledgeDashboardEl.toggleClass("health-bad", healthStatus === "bad");
     this.knowledgeDashboardEl.toggleClass("is-loading", this.knowledgeDashboardLoading);
 
-    const header = this.knowledgeDashboardEl.createDiv({ cls: "codex-kb-dashboard-header" });
-    const title = header.createDiv({ cls: "codex-kb-dashboard-title" });
-    const titleIcon = title.createSpan({ cls: "codex-kb-dashboard-icon" });
+    const header = this.knowledgeDashboardEl.createDiv({ cls: "xy-kb-dashboard-header" });
+    const title = header.createDiv({ cls: "xy-kb-dashboard-title" });
+    const titleIcon = title.createSpan({ cls: "xy-kb-dashboard-icon" });
     setIcon(titleIcon, "database");
     title.createSpan({ text: "知识库状态" });
 
-    const summary = header.createDiv({ cls: "codex-kb-dashboard-summary" });
+    const summary = header.createDiv({ cls: "xy-kb-dashboard-summary" });
     if (snapshot) {
       this.addKnowledgeDashboardRulesMetric(summary, snapshot);
       this.addKnowledgeDashboardMetric(summary, "Raw", `${snapshot.raw.fileCount}`);
@@ -934,16 +936,16 @@ export class XiaoyuanView extends ItemView {
       this.addKnowledgeDashboardMetric(summary, "Inbox", `${snapshot.inbox.fileCount}`);
       this.addKnowledgeDashboardHealthMetric(summary, snapshot.health.status, snapshot.health.label);
     } else {
-      summary.createSpan({ cls: "codex-kb-dashboard-muted", text: this.knowledgeDashboardError || "等待扫描" });
+      summary.createSpan({ cls: "xy-kb-dashboard-muted", text: this.knowledgeDashboardError || "等待扫描" });
     }
 
-    const actions = header.createDiv({ cls: "codex-kb-dashboard-actions" });
-    const refresh = actions.createEl("button", { cls: "codex-icon-button codex-kb-dashboard-button", attr: { type: "button", title: "刷新状态", "aria-label": "刷新状态" } });
+    const actions = header.createDiv({ cls: "xy-kb-dashboard-actions" });
+    const refresh = actions.createEl("button", { cls: "xy-icon-button xy-kb-dashboard-button", attr: { type: "button", title: "刷新状态", "aria-label": "刷新状态" } });
     setIcon(refresh, this.knowledgeDashboardLoading ? "loader-circle" : "refresh-cw");
     refresh.disabled = this.knowledgeDashboardLoading;
     refresh.onclick = () => void this.refreshKnowledgeDashboard(true);
     const toggleTitle = this.knowledgeDashboardExpanded ? "收起详情" : "展开详情";
-    const toggle = actions.createEl("button", { cls: "codex-icon-button codex-kb-dashboard-button", attr: { type: "button", title: toggleTitle, "aria-label": toggleTitle } });
+    const toggle = actions.createEl("button", { cls: "xy-icon-button xy-kb-dashboard-button", attr: { type: "button", title: toggleTitle, "aria-label": toggleTitle } });
     setIcon(toggle, this.knowledgeDashboardExpanded ? "chevron-up" : "chevron-down");
     toggle.onclick = () => {
       this.knowledgeDashboardExpanded = !this.knowledgeDashboardExpanded;
@@ -951,11 +953,11 @@ export class XiaoyuanView extends ItemView {
     };
 
     if (this.knowledgeDashboardError) {
-      this.knowledgeDashboardEl.createDiv({ cls: "codex-kb-dashboard-error", text: this.knowledgeDashboardError });
+      this.knowledgeDashboardEl.createDiv({ cls: "xy-kb-dashboard-error", text: this.knowledgeDashboardError });
     }
     if (!snapshot || !this.knowledgeDashboardExpanded) return;
 
-    const details = this.knowledgeDashboardEl.createDiv({ cls: "codex-kb-dashboard-details" });
+    const details = this.knowledgeDashboardEl.createDiv({ cls: "xy-kb-dashboard-details" });
     this.renderKnowledgeDashboardHealth(details, snapshot);
     this.renderKnowledgeDashboardWiki(details, snapshot);
     this.renderKnowledgeDashboardQueues(details, snapshot);
@@ -992,14 +994,14 @@ export class XiaoyuanView extends ItemView {
   }
 
   private addKnowledgeDashboardMetric(container: HTMLElement, label: string, value: string): void {
-    const metric = container.createSpan({ cls: "codex-kb-dashboard-metric" });
-    metric.createSpan({ cls: "codex-kb-dashboard-metric-label", text: label });
-    metric.createSpan({ cls: "codex-kb-dashboard-metric-value", text: value });
+    const metric = container.createSpan({ cls: "xy-kb-dashboard-metric" });
+    metric.createSpan({ cls: "xy-kb-dashboard-metric-label", text: label });
+    metric.createSpan({ cls: "xy-kb-dashboard-metric-value", text: value });
   }
 
   private addKnowledgeDashboardRulesMetric(container: HTMLElement, snapshot: KnowledgeBaseDashboardSnapshot): void {
     const button = container.createEl("button", {
-      cls: "codex-kb-dashboard-metric codex-kb-dashboard-rule",
+      cls: "xy-kb-dashboard-metric xy-kb-dashboard-rule",
       attr: {
         type: "button",
         title: snapshot.rulesFileExists ? `打开规则文件：${snapshot.rulesFilePath}` : "规则文件缺失，点击查看提示",
@@ -1007,8 +1009,8 @@ export class XiaoyuanView extends ItemView {
       }
     });
     button.toggleClass("is-missing", !snapshot.rulesFileExists);
-    button.createSpan({ cls: "codex-kb-dashboard-metric-label", text: "规则" });
-    button.createSpan({ cls: "codex-kb-dashboard-metric-value", text: snapshot.rulesFileExists ? snapshot.rulesFilePath : "缺失" });
+    button.createSpan({ cls: "xy-kb-dashboard-metric-label", text: "规则" });
+    button.createSpan({ cls: "xy-kb-dashboard-metric-value", text: snapshot.rulesFileExists ? snapshot.rulesFilePath : "缺失" });
     button.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1017,9 +1019,9 @@ export class XiaoyuanView extends ItemView {
   }
 
   private addKnowledgeDashboardHealthMetric(container: HTMLElement, status: string, label: string): void {
-    const metric = container.createSpan({ cls: `codex-kb-dashboard-metric codex-kb-dashboard-health codex-kb-health-${status}` });
-    metric.createSpan({ cls: "codex-kb-status-dot" });
-    metric.createSpan({ cls: "codex-kb-dashboard-metric-value", text: label });
+    const metric = container.createSpan({ cls: `xy-kb-dashboard-metric xy-kb-dashboard-health xy-kb-health-${status}` });
+    metric.createSpan({ cls: "xy-kb-status-dot" });
+    metric.createSpan({ cls: "xy-kb-dashboard-metric-value", text: label });
   }
 
   private async openKnowledgeDashboardRulesFile(snapshot: KnowledgeBaseDashboardSnapshot): Promise<void> {
@@ -1037,23 +1039,23 @@ export class XiaoyuanView extends ItemView {
 
   private renderKnowledgeDashboardHealth(container: HTMLElement, snapshot: KnowledgeBaseDashboardSnapshot): void {
     const section = this.addKnowledgeDashboardSection(container, "健康概览");
-    const overview = section.createDiv({ cls: "codex-kb-dashboard-health-overview" });
+    const overview = section.createDiv({ cls: "xy-kb-dashboard-health-overview" });
     this.addKnowledgeDashboardMeter(
       overview,
       "知识库健康",
       snapshot.health.score,
-      `codex-kb-health-${snapshot.health.status}`,
+      `xy-kb-health-${snapshot.health.status}`,
       snapshot.health.label
     );
     this.addKnowledgeDashboardMeter(
       overview,
       "体检新鲜度",
       snapshot.checkFreshness.score,
-      `codex-kb-freshness-${snapshot.checkFreshness.status}`,
+      `xy-kb-freshness-${snapshot.checkFreshness.status}`,
       snapshot.checkFreshness.label
     );
 
-    const facts = section.createDiv({ cls: "codex-kb-dashboard-facts" });
+    const facts = section.createDiv({ cls: "xy-kb-dashboard-facts" });
     this.addKnowledgeDashboardFact(facts, "最近体检", snapshot.checkFreshness.lastCheckAt ? formatAbsoluteTime(snapshot.checkFreshness.lastCheckAt) : "无记录");
     this.addKnowledgeDashboardFact(facts, "新鲜度", snapshot.checkFreshness.daysSinceCheck >= 0 ? `${snapshot.checkFreshness.daysSinceCheck} 天前确认` : "无记录");
     this.addKnowledgeDashboardFact(facts, "连续体检", snapshot.health.streakDays ? `${snapshot.health.streakDays} 天` : "0 天");
@@ -1063,25 +1065,25 @@ export class XiaoyuanView extends ItemView {
     const healthReasons = snapshot.health.status === "healthy" ? [] : snapshot.health.reasons;
     const freshnessReasons = snapshot.checkFreshness.status === "fresh" ? [] : snapshot.checkFreshness.reasons;
     if (!healthReasons.length && !freshnessReasons.length) return;
-    const reasons = section.createDiv({ cls: "codex-kb-dashboard-reasons" });
+    const reasons = section.createDiv({ cls: "xy-kb-dashboard-reasons" });
     for (const reason of healthReasons) {
-      reasons.createDiv({ cls: "codex-kb-dashboard-reason", text: reason });
+      reasons.createDiv({ cls: "xy-kb-dashboard-reason", text: reason });
     }
     for (const reason of freshnessReasons) {
-      reasons.createDiv({ cls: "codex-kb-dashboard-reason codex-kb-dashboard-reason-muted", text: reason });
+      reasons.createDiv({ cls: "xy-kb-dashboard-reason xy-kb-dashboard-reason-muted", text: reason });
     }
   }
 
   private addKnowledgeDashboardMeter(container: HTMLElement, label: string, scoreValue: number, statusClass: string, statusLabel: string): void {
-    const row = container.createDiv({ cls: "codex-kb-dashboard-meter-row" });
-    row.createDiv({ cls: "codex-kb-dashboard-meter-label", text: label });
-    const score = row.createDiv({ cls: "codex-kb-dashboard-score" });
-    score.createSpan({ cls: "codex-kb-dashboard-score-label", text: `${scoreValue}` });
-    const track = score.createDiv({ cls: "codex-kb-dashboard-score-track" });
-    const fill = track.createDiv({ cls: `codex-kb-dashboard-score-fill ${statusClass}` });
+    const row = container.createDiv({ cls: "xy-kb-dashboard-meter-row" });
+    row.createDiv({ cls: "xy-kb-dashboard-meter-label", text: label });
+    const score = row.createDiv({ cls: "xy-kb-dashboard-score" });
+    score.createSpan({ cls: "xy-kb-dashboard-score-label", text: `${scoreValue}` });
+    const track = score.createDiv({ cls: "xy-kb-dashboard-score-track" });
+    const fill = track.createDiv({ cls: `xy-kb-dashboard-score-fill ${statusClass}` });
     fill.style.width = `${Math.max(0, Math.min(100, scoreValue))}%`;
-    const status = row.createDiv({ cls: `codex-kb-dashboard-health-badge ${statusClass}` });
-    status.createSpan({ cls: "codex-kb-status-dot" });
+    const status = row.createDiv({ cls: `xy-kb-dashboard-health-badge ${statusClass}` });
+    status.createSpan({ cls: "xy-kb-status-dot" });
     status.createSpan({ text: statusLabel });
   }
 
@@ -1103,12 +1105,12 @@ export class XiaoyuanView extends ItemView {
     const section = this.addKnowledgeDashboardSection(container, "体检热力图");
     const year = heatmapYear(snapshot);
     const completedChecks = snapshot.checkHeatmap.filter((day) => day.status === "success" || day.status === "failed").length;
-    section.createDiv({ cls: "codex-kb-heatmap-summary", text: `${year} 年 ${completedChecks} 次体检` });
-    const heatmap = section.createDiv({ cls: "codex-kb-dashboard-heatmap" });
-    const grid = heatmap.createDiv({ cls: "codex-kb-heatmap-grid" });
+    section.createDiv({ cls: "xy-kb-heatmap-summary", text: `${year} 年 ${completedChecks} 次体检` });
+    const heatmap = section.createDiv({ cls: "xy-kb-dashboard-heatmap" });
+    const grid = heatmap.createDiv({ cls: "xy-kb-heatmap-grid" });
     const yearStart = new Date(year, 0, 1, 12, 0, 0, 0);
     const weekCount = Math.max(1, ...snapshot.checkHeatmap.map((day) => heatmapWeekIndex(day.date, yearStart) + 1));
-    grid.style.setProperty("--codex-kb-heatmap-weeks", String(weekCount));
+    grid.style.setProperty("--xy-kb-heatmap-weeks", String(weekCount));
 
     const monthStarts = new Set<string>();
     for (const day of snapshot.checkHeatmap) {
@@ -1117,12 +1119,12 @@ export class XiaoyuanView extends ItemView {
     for (const dateKey of monthStarts) {
       const date = parseHeatmapDateKey(dateKey);
       if (!date) continue;
-      const label = grid.createDiv({ cls: "codex-kb-heatmap-month", text: HEATMAP_MONTH_LABELS[date.getMonth()] });
+      const label = grid.createDiv({ cls: "xy-kb-heatmap-month", text: HEATMAP_MONTH_LABELS[date.getMonth()] });
       label.style.gridColumn = `${heatmapWeekIndex(dateKey, yearStart) + 2}`;
       label.style.gridRow = "1";
     }
     for (const [weekday, label] of [[1, "Mon"], [3, "Wed"], [5, "Fri"]] as Array<[number, string]>) {
-      const dayLabel = grid.createDiv({ cls: "codex-kb-heatmap-weekday", text: label });
+      const dayLabel = grid.createDiv({ cls: "xy-kb-heatmap-weekday", text: label });
       dayLabel.style.gridColumn = "1";
       dayLabel.style.gridRow = `${weekday + 2}`;
     }
@@ -1131,38 +1133,38 @@ export class XiaoyuanView extends ItemView {
       const date = parseHeatmapDateKey(day.date);
       if (!date) continue;
       const cell = grid.createSpan({
-        cls: `codex-kb-heatmap-cell is-${day.status}`,
+        cls: `xy-kb-heatmap-cell is-${day.status}`,
         attr: { title: `${day.date} · ${knowledgeHeatmapStatusLabel(day.status)}`, "aria-label": `${day.date} ${knowledgeHeatmapStatusLabel(day.status)}` }
       });
       cell.style.gridColumn = `${heatmapWeekIndex(day.date, yearStart) + 2}`;
       cell.style.gridRow = `${date.getDay() + 2}`;
     }
-    const legend = section.createDiv({ cls: "codex-kb-dashboard-legend" });
-    legend.createSpan({ cls: "codex-kb-dashboard-legend-label", text: "Less" });
-    legend.createSpan({ cls: "codex-kb-legend-dot is-none" });
-    legend.createSpan({ cls: "codex-kb-legend-dot is-success is-low" });
-    legend.createSpan({ cls: "codex-kb-legend-dot is-success" });
-    legend.createSpan({ cls: "codex-kb-dashboard-legend-label", text: "More" });
-    const failed = legend.createSpan({ cls: "codex-kb-dashboard-legend-item" });
-    failed.createSpan({ cls: "codex-kb-legend-dot is-failed" });
+    const legend = section.createDiv({ cls: "xy-kb-dashboard-legend" });
+    legend.createSpan({ cls: "xy-kb-dashboard-legend-label", text: "Less" });
+    legend.createSpan({ cls: "xy-kb-legend-dot is-none" });
+    legend.createSpan({ cls: "xy-kb-legend-dot is-success is-low" });
+    legend.createSpan({ cls: "xy-kb-legend-dot is-success" });
+    legend.createSpan({ cls: "xy-kb-dashboard-legend-label", text: "More" });
+    const failed = legend.createSpan({ cls: "xy-kb-dashboard-legend-item" });
+    failed.createSpan({ cls: "xy-kb-legend-dot is-failed" });
     failed.createSpan({ text: "失败" });
   }
 
   private addKnowledgeDashboardSection(container: HTMLElement, title: string): HTMLElement {
-    const section = container.createDiv({ cls: "codex-kb-dashboard-section" });
-    section.createDiv({ cls: "codex-kb-dashboard-section-title", text: title });
+    const section = container.createDiv({ cls: "xy-kb-dashboard-section" });
+    section.createDiv({ cls: "xy-kb-dashboard-section-title", text: title });
     return section;
   }
 
   private addKnowledgeDashboardFact(container: HTMLElement, label: string, value: string): void {
-    const fact = container.createDiv({ cls: "codex-kb-dashboard-fact" });
-    fact.createSpan({ cls: "codex-kb-dashboard-fact-label", text: label });
-    fact.createSpan({ cls: "codex-kb-dashboard-fact-value", text: value });
+    const fact = container.createDiv({ cls: "xy-kb-dashboard-fact" });
+    fact.createSpan({ cls: "xy-kb-dashboard-fact-label", text: label });
+    fact.createSpan({ cls: "xy-kb-dashboard-fact-value", text: value });
   }
 
   private addKnowledgeDashboardTable(container: HTMLElement, title: string, columns: string[], rows: string[][]): void {
     const section = this.addKnowledgeDashboardSection(container, title);
-    const table = section.createEl("table", { cls: "codex-kb-dashboard-table" });
+    const table = section.createEl("table", { cls: "xy-kb-dashboard-table" });
     const thead = table.createEl("thead");
     const headRow = thead.createEl("tr");
     for (const column of columns) headRow.createEl("th", { text: column });
@@ -1200,15 +1202,15 @@ export class XiaoyuanView extends ItemView {
   }
 
   private renderMessage(container: HTMLElement, message: ChatMessage): void {
-    const wrapper = container.createDiv({ cls: `codex-message codex-message-${message.role}` });
-    wrapper.toggleClass("codex-message-streaming", message.status === "running");
-    wrapper.toggleClass(`codex-message-type-${message.itemType ?? "text"}`, true);
-    if (message.title) wrapper.createDiv({ cls: "codex-message-title", text: message.title });
+    const wrapper = container.createDiv({ cls: `xy-message xy-message-${message.role}` });
+    wrapper.toggleClass("xy-message-streaming", message.status === "running");
+    wrapper.toggleClass(`xy-message-type-${message.itemType ?? "text"}`, true);
+    if (message.title) wrapper.createDiv({ cls: "xy-message-title", text: message.title });
     if (message.attachments?.length) {
-      this.renderUserAttachmentChips(wrapper.createDiv({ cls: "codex-message-attachments" }), message.attachments);
+      this.renderUserAttachmentChips(wrapper.createDiv({ cls: "xy-message-attachments" }), message.attachments);
     }
     if (message.images?.length) {
-      const images = wrapper.createDiv({ cls: "codex-message-images" });
+      const images = wrapper.createDiv({ cls: "xy-message-images" });
       for (const image of message.images) {
         const img = images.createEl("img", { attr: { alt: image.name } });
         img.src = toImageSrc(this.app, image.path);
@@ -1216,7 +1218,7 @@ export class XiaoyuanView extends ItemView {
         img.onclick = () => openImageOverlay(img.src);
       }
     }
-    const content = wrapper.createDiv({ cls: "codex-message-content" });
+    const content = wrapper.createDiv({ cls: "xy-message-content" });
     if (message.itemType === "thinking") {
       this.renderThinkingMessage(content, message);
       return;
@@ -1232,34 +1234,34 @@ export class XiaoyuanView extends ItemView {
 
   private renderKnowledgeBaseCitations(container: HTMLElement, messageId: string, citations: KnowledgeBaseCitationSummary): void {
     const stateKey = `kb-citations:${messageId}`;
-    const details = container.createEl("details", { cls: `codex-kb-citations codex-kb-citations-${citations.status}` });
+    const details = container.createEl("details", { cls: `xy-kb-citations xy-kb-citations-${citations.status}` });
     details.open = this.openKnowledgeBaseCitations.get(stateKey) ?? false;
     details.ontoggle = () => {
       this.openKnowledgeBaseCitations.set(stateKey, details.open);
       this.scheduleMeasureVirtualRows();
     };
-    const summary = details.createEl("summary", { cls: "codex-kb-citations-summary" });
-    summary.createSpan({ cls: "codex-kb-citations-title", text: "本次来源" });
-    const buckets = summary.createSpan({ cls: "codex-kb-citation-buckets" });
+    const summary = details.createEl("summary", { cls: "xy-kb-citations-summary" });
+    summary.createSpan({ cls: "xy-kb-citations-title", text: "本次来源" });
+    const buckets = summary.createSpan({ cls: "xy-kb-citation-buckets" });
     for (const bucket of ["wiki", "journal", "outputs"] as KnowledgeBaseCitationBucket[]) {
-      buckets.createSpan({ cls: `codex-kb-source-count codex-kb-source-${bucket}`, text: `${kbBucketLabel(bucket)} ${citations.counts[bucket] ?? 0}` });
+      buckets.createSpan({ cls: `xy-kb-source-count xy-kb-source-${bucket}`, text: `${kbBucketLabel(bucket)} ${citations.counts[bucket] ?? 0}` });
     }
-    summary.createSpan({ cls: `codex-kb-evidence-status codex-kb-evidence-${citations.status}`, text: kbEvidenceStatusLabel(citations.status) });
+    summary.createSpan({ cls: `xy-kb-evidence-status xy-kb-evidence-${citations.status}`, text: kbEvidenceStatusLabel(citations.status) });
 
-    const body = details.createDiv({ cls: "codex-kb-citations-body" });
+    const body = details.createDiv({ cls: "xy-kb-citations-body" });
     if (!citations.citations.length) {
-      body.createDiv({ cls: "codex-kb-no-evidence", text: "没有命中文件，也没有引用片段；不会显示伪来源。" });
+      body.createDiv({ cls: "xy-kb-no-evidence", text: "没有命中文件，也没有引用片段；不会显示伪来源。" });
       return;
     }
     for (const citation of citations.citations) this.renderKnowledgeBaseCitationItem(body, citation);
   }
 
   private renderKnowledgeBaseCitationItem(container: HTMLElement, citation: KnowledgeBaseCitation): void {
-    const item = container.createDiv({ cls: `codex-kb-citation-item codex-kb-citation-${citation.bucket}` });
-    const header = item.createDiv({ cls: "codex-kb-citation-header" });
-    header.createSpan({ cls: `codex-kb-citation-badge codex-kb-source-${citation.bucket}`, text: kbBucketLabel(citation.bucket) });
+    const item = container.createDiv({ cls: `xy-kb-citation-item xy-kb-citation-${citation.bucket}` });
+    const header = item.createDiv({ cls: "xy-kb-citation-header" });
+    header.createSpan({ cls: `xy-kb-citation-badge xy-kb-source-${citation.bucket}`, text: kbBucketLabel(citation.bucket) });
     const title = header.createEl("button", {
-      cls: "codex-kb-citation-title",
+      cls: "xy-kb-citation-title",
       text: citation.title || citation.path,
       attr: {
         type: "button",
@@ -1271,9 +1273,9 @@ export class XiaoyuanView extends ItemView {
       event.stopPropagation();
       void this.openKnowledgeBaseCitation(citation);
     };
-    header.createSpan({ cls: `codex-kb-citation-relevance codex-kb-evidence-${citation.relevance}`, text: citation.relevance === "strong" ? "强证据" : "弱相关" });
+    header.createSpan({ cls: `xy-kb-citation-relevance xy-kb-evidence-${citation.relevance}`, text: citation.relevance === "strong" ? "强证据" : "弱相关" });
     const open = header.createEl("button", {
-      cls: "codex-kb-citation-open",
+      cls: "xy-kb-citation-open",
       text: "打开",
       attr: {
         type: "button",
@@ -1285,12 +1287,12 @@ export class XiaoyuanView extends ItemView {
       event.stopPropagation();
       void this.openKnowledgeBaseCitation(citation);
     };
-    item.createDiv({ cls: "codex-kb-citation-path", text: citation.path });
-    const quote = item.createDiv({ cls: "codex-kb-citation-quote" });
+    item.createDiv({ cls: "xy-kb-citation-path", text: citation.path });
+    const quote = item.createDiv({ cls: "xy-kb-citation-quote" });
     for (const line of citation.excerptLines.length ? citation.excerptLines : ["无可用引用片段"]) {
-      quote.createDiv({ cls: "codex-kb-citation-line", text: line });
+      quote.createDiv({ cls: "xy-kb-citation-line", text: line });
     }
-    item.createDiv({ cls: "codex-kb-citation-reason", text: `为什么相关：${citation.reason}` });
+    item.createDiv({ cls: "xy-kb-citation-reason", text: `为什么相关：${citation.reason}` });
   }
 
   private async openKnowledgeBaseCitation(citation: KnowledgeBaseCitation): Promise<void> {
@@ -1307,13 +1309,13 @@ export class XiaoyuanView extends ItemView {
 
   private renderProcessGroup(container: HTMLElement, messages: ChatMessage[]): void {
     const groupId = processGroupId(messages);
-    const wrapper = container.createDiv({ cls: "codex-message codex-message-tool codex-message-type-processGroup" });
-    const details = wrapper.createEl("details", { cls: "codex-process-group" });
+    const wrapper = container.createDiv({ cls: "xy-message xy-message-tool xy-message-type-processGroup" });
+    const details = wrapper.createEl("details", { cls: "xy-process-group" });
     details.open = this.openProcessGroups.get(groupId) ?? false;
     let body: HTMLElement | null = null;
     const renderBody = () => {
       if (body) return;
-      body = details.createDiv({ cls: "codex-process-group-body" });
+      body = details.createDiv({ cls: "xy-process-group-body" });
       for (const message of messages) this.renderProcessMessage(body, message, true);
     };
     details.ontoggle = () => {
@@ -1321,30 +1323,30 @@ export class XiaoyuanView extends ItemView {
       if (details.open) renderBody();
       this.scheduleMeasureVirtualRows();
     };
-    const summary = details.createEl("summary", { cls: "codex-process-group-summary" });
-    const icon = summary.createSpan({ cls: "codex-process-group-icon" });
+    const summary = details.createEl("summary", { cls: "xy-process-group-summary" });
+    const icon = summary.createSpan({ cls: "xy-process-group-icon" });
     setIcon(icon, "list-tree");
-    const main = summary.createDiv({ cls: "codex-process-group-main" });
-    main.createSpan({ cls: "codex-process-group-title", text: processGroupTitle(messages) });
-    main.createSpan({ cls: "codex-process-group-detail", text: processGroupDetail(messages) });
+    const main = summary.createDiv({ cls: "xy-process-group-main" });
+    main.createSpan({ cls: "xy-process-group-title", text: processGroupTitle(messages) });
+    main.createSpan({ cls: "xy-process-group-detail", text: processGroupDetail(messages) });
     const status = processGroupStatus(messages);
-    summary.createSpan({ cls: "codex-structured-status", text: status });
+    summary.createSpan({ cls: "xy-structured-status", text: status });
     if (details.open) renderBody();
   }
 
   private renderUserAttachmentChips(container: HTMLElement, attachments: StoredAttachment[]): void {
     for (const attachment of attachments) {
       const chip = container.createEl("button", {
-        cls: `codex-message-attachment-chip codex-message-attachment-${attachment.type}`,
+        cls: `xy-message-attachment-chip xy-message-attachment-${attachment.type}`,
         attr: {
           type: "button",
           title: attachment.path,
           "aria-label": `打开附件 ${attachment.name}`
         }
       });
-      const icon = chip.createSpan({ cls: "codex-message-attachment-icon" });
+      const icon = chip.createSpan({ cls: "xy-message-attachment-icon" });
       setIcon(icon, attachment.type === "image" ? "image" : "file-text");
-      chip.createSpan({ cls: "codex-message-attachment-name", text: attachment.name });
+      chip.createSpan({ cls: "xy-message-attachment-name", text: attachment.name });
       chip.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1363,29 +1365,29 @@ export class XiaoyuanView extends ItemView {
   }
 
   private renderThinkingMessage(container: HTMLElement, message: ChatMessage): void {
-    const shell = container.createDiv({ cls: "codex-thinking-shell" });
+    const shell = container.createDiv({ cls: "xy-thinking-shell" });
     if (message.status === "running") {
-      const row = shell.createDiv({ cls: "codex-thinking-live" });
-      row.createSpan({ cls: "codex-thinking-dot" });
+      const row = shell.createDiv({ cls: "xy-thinking-live" });
+      row.createSpan({ cls: "xy-thinking-dot" });
       row.createSpan({ text: message.text || "正在生成回复..." });
       return;
     }
-    shell.createEl("em", { cls: "codex-response-footer", text: message.text || "思考完成" });
+    shell.createEl("em", { cls: "xy-response-footer", text: message.text || "思考完成" });
   }
 
   private renderProcessMessage(container: HTMLElement, message: ChatMessage, nested = false): void {
-    const details = container.createEl("details", { cls: `codex-structured codex-process codex-process-${message.itemType ?? "item"}` });
+    const details = container.createEl("details", { cls: `xy-structured xy-process xy-process-${message.itemType ?? "item"}` });
     details.toggleClass("is-running", message.status === "running");
     details.toggleClass("is-completed", message.status === "completed");
     details.toggleClass("is-error", message.status === "error" || message.status === "failed");
     details.toggleClass("is-nested", nested);
-    if (message.processKind) details.toggleClass(`codex-process-kind-${message.processKind}`, true);
+    if (message.processKind) details.toggleClass(`xy-process-kind-${message.processKind}`, true);
     const defaultOpen = !nested && (message.itemType === "reasoning" || message.itemType === "plan" || message.status === "error" || message.status === "failed");
     details.open = this.openProcessItems.get(message.id) ?? defaultOpen;
     let body: HTMLElement | null = null;
     const renderBody = () => {
       if (body) return;
-      body = details.createDiv({ cls: "codex-structured-body codex-process-body" });
+      body = details.createDiv({ cls: "xy-structured-body xy-process-body" });
       this.renderProcessBody(body, message);
     };
     details.ontoggle = () => {
@@ -1393,19 +1395,19 @@ export class XiaoyuanView extends ItemView {
       if (details.open) renderBody();
       this.scheduleMeasureVirtualRows();
     };
-    const summary = details.createEl("summary", { cls: "codex-process-summary" });
-    const icon = summary.createSpan({ cls: "codex-structured-icon codex-process-icon" });
+    const summary = details.createEl("summary", { cls: "xy-process-summary" });
+    const icon = summary.createSpan({ cls: "xy-structured-icon xy-process-icon" });
     setIcon(icon, iconForProcessMessage(message));
-    const main = summary.createDiv({ cls: "codex-process-main" });
+    const main = summary.createDiv({ cls: "xy-process-main" });
     if (message.itemType === "fileChange" && message.diffSummary?.files.length) {
       this.renderProcessEditSummary(main, message);
     } else {
-      main.createSpan({ cls: "codex-structured-title codex-process-title", text: titleForItemType(message) });
+      main.createSpan({ cls: "xy-structured-title xy-process-title", text: titleForItemType(message) });
       if (message.itemType === "fileChange" && message.diffSummary) this.renderDiffStats(main, message.diffSummary);
-      if (message.details) main.createDiv({ cls: "codex-process-detail", text: message.details });
-      if (message.itemType === "fileChange" && message.files?.length) this.renderProcessFileChips(main.createDiv({ cls: "codex-process-files" }), message.files);
+      if (message.details) main.createDiv({ cls: "xy-process-detail", text: message.details });
+      if (message.itemType === "fileChange" && message.files?.length) this.renderProcessFileChips(main.createDiv({ cls: "xy-process-files" }), message.files);
     }
-    if (message.status) summary.createSpan({ cls: "codex-structured-status", text: labelForStatus(message.status) });
+    if (message.status) summary.createSpan({ cls: "xy-structured-status", text: labelForStatus(message.status) });
     if (details.open) renderBody();
   }
 
@@ -1420,7 +1422,7 @@ export class XiaoyuanView extends ItemView {
       return;
     }
     const rawLike = message.itemType === "commandExecution" || message.itemType === "fileChange" || message.itemType === "mcpToolCall" || message.itemType === "dynamicToolCall" || message.itemType === "collabAgentToolCall";
-    if (rawLike) body.createDiv({ cls: "codex-process-raw-title", text: this.rawMetaLabel(message) });
+    if (rawLike) body.createDiv({ cls: "xy-process-raw-title", text: this.rawMetaLabel(message) });
     if (message.rawRef) {
       this.renderDeferredRawText(body, message, fallback);
       return;
@@ -1445,12 +1447,12 @@ export class XiaoyuanView extends ItemView {
       this.renderDiffFiles(body, files, message.files ?? []);
     };
     if (message.rawRef) {
-      body.createDiv({ cls: "codex-process-raw-loading", text: "正在加载文件改动..." });
+      body.createDiv({ cls: "xy-process-raw-loading", text: "正在加载文件改动..." });
       void this.loadRawText(message)
         .then((text) => renderDiff(text))
         .catch((error) => {
           body.empty();
-          body.createDiv({ cls: "codex-process-raw-loading", text: `文件改动加载失败：${error instanceof Error ? error.message : String(error)}` });
+          body.createDiv({ cls: "xy-process-raw-loading", text: `文件改动加载失败：${error instanceof Error ? error.message : String(error)}` });
           this.renderPlainTextBlock(body, displayTextForMessage(message) || fallback);
         });
       return;
@@ -1461,12 +1463,12 @@ export class XiaoyuanView extends ItemView {
   private renderCommandExecutionBody(body: HTMLElement, message: ChatMessage, fallback: string): void {
     const renderShell = (text: string) => {
       body.empty();
-      const shell = body.createDiv({ cls: "codex-shell-block" });
-      shell.createDiv({ cls: "codex-shell-label", text: "Shell" });
-      shell.createEl("pre", { cls: "codex-shell-output", text: shellTranscript(text || fallback) });
+      const shell = body.createDiv({ cls: "xy-shell-block" });
+      shell.createDiv({ cls: "xy-shell-label", text: "Shell" });
+      shell.createEl("pre", { cls: "xy-shell-output", text: shellTranscript(text || fallback) });
     };
     if (message.rawRef) {
-      body.createDiv({ cls: "codex-process-raw-loading", text: "正在加载命令输出..." });
+      body.createDiv({ cls: "xy-process-raw-loading", text: "正在加载命令输出..." });
       void this.loadRawText(message)
         .then((text) => {
           renderShell(text);
@@ -1474,7 +1476,7 @@ export class XiaoyuanView extends ItemView {
         })
         .catch((error) => {
           body.empty();
-          body.createDiv({ cls: "codex-process-raw-loading", text: `命令输出加载失败：${error instanceof Error ? error.message : String(error)}` });
+          body.createDiv({ cls: "xy-process-raw-loading", text: `命令输出加载失败：${error instanceof Error ? error.message : String(error)}` });
           renderShell(displayTextForMessage(message) || fallback);
           this.scheduleMeasureVirtualRows();
         });
@@ -1484,25 +1486,25 @@ export class XiaoyuanView extends ItemView {
   }
 
   private renderDiffOverview(container: HTMLElement, summary: DiffSummary): void {
-    const row = container.createDiv({ cls: "codex-diff-overview" });
-    row.createSpan({ cls: "codex-diff-overview-title", text: diffSummaryLabel(summary) });
+    const row = container.createDiv({ cls: "xy-diff-overview" });
+    row.createSpan({ cls: "xy-diff-overview-title", text: diffSummaryLabel(summary) });
     this.renderDiffStats(row, summary);
   }
 
   private renderDiffStats(container: HTMLElement, summary: DiffSummary): void {
-    const stats = container.createSpan({ cls: "codex-diff-stats" });
-    stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-add", text: `+${summary.added}` });
-    stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-remove", text: `-${summary.removed}` });
+    const stats = container.createSpan({ cls: "xy-diff-stats" });
+    stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-add", text: `+${summary.added}` });
+    stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-remove", text: `-${summary.removed}` });
   }
 
   private renderDiffFiles(container: HTMLElement, files: ParsedDiffFile[], refs: ProcessFileRef[]): void {
-    const list = container.createDiv({ cls: "codex-diff-files" });
+    const list = container.createDiv({ cls: "xy-diff-files" });
     if (files.length === 1) {
       this.renderDiffFileBody(list, files[0]);
       return;
     }
     files.forEach((file, index) => {
-      const details = list.createEl("details", { cls: "codex-diff-file" });
+      const details = list.createEl("details", { cls: "xy-diff-file" });
       details.open = files.length === 1 || index === 0;
       let rendered = false;
       const renderRows = () => {
@@ -1513,53 +1515,53 @@ export class XiaoyuanView extends ItemView {
       details.ontoggle = () => {
         if (details.open) renderRows();
       };
-      const summary = details.createEl("summary", { cls: "codex-diff-file-summary" });
-      const main = summary.createSpan({ cls: "codex-diff-file-main" });
+      const summary = details.createEl("summary", { cls: "xy-diff-file-summary" });
+      const main = summary.createSpan({ cls: "xy-diff-file-main" });
       const ref = findProcessFileRef(refs, file.path);
       if (ref) {
-        this.renderProcessFileTextLink(main, ref, file.path, "codex-diff-file-path");
+        this.renderProcessFileTextLink(main, ref, file.path, "xy-diff-file-path");
       } else {
-        main.createSpan({ cls: "codex-diff-file-path", text: file.path });
+        main.createSpan({ cls: "xy-diff-file-path", text: file.path });
       }
-      if (file.previousPath) main.createSpan({ cls: "codex-diff-file-previous", text: `原路径 ${file.previousPath}` });
-      summary.createSpan({ cls: "codex-diff-file-kind", text: labelForDiffKind(file.kind) });
-      const stats = summary.createSpan({ cls: "codex-diff-file-stats" });
-      stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-add", text: `+${file.added}` });
-      stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-remove", text: `-${file.removed}` });
+      if (file.previousPath) main.createSpan({ cls: "xy-diff-file-previous", text: `原路径 ${file.previousPath}` });
+      summary.createSpan({ cls: "xy-diff-file-kind", text: labelForDiffKind(file.kind) });
+      const stats = summary.createSpan({ cls: "xy-diff-file-stats" });
+      stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-add", text: `+${file.added}` });
+      stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-remove", text: `-${file.removed}` });
       if (details.open) renderRows();
     });
   }
 
   private renderDiffFileBody(container: HTMLElement, file: ParsedDiffFile): void {
-    const body = container.createDiv({ cls: "codex-diff-file-body" });
+    const body = container.createDiv({ cls: "xy-diff-file-body" });
     if (!file.lines.length) {
-      body.createDiv({ cls: "codex-diff-empty", text: "没有可展示的 diff 内容" });
+      body.createDiv({ cls: "xy-diff-empty", text: "没有可展示的 diff 内容" });
       return;
     }
     for (const line of file.lines) {
-      const row = body.createDiv({ cls: `codex-diff-line codex-diff-line-${line.type}` });
-      row.createSpan({ cls: "codex-diff-line-no codex-diff-line-old", text: line.oldLine === null ? "" : String(line.oldLine) });
-      row.createSpan({ cls: "codex-diff-line-no codex-diff-line-new", text: line.newLine === null ? "" : String(line.newLine) });
-      row.createSpan({ cls: "codex-diff-marker", text: line.marker });
-      row.createSpan({ cls: "codex-diff-content", text: line.text || " " });
+      const row = body.createDiv({ cls: `xy-diff-line xy-diff-line-${line.type}` });
+      row.createSpan({ cls: "xy-diff-line-no xy-diff-line-old", text: line.oldLine === null ? "" : String(line.oldLine) });
+      row.createSpan({ cls: "xy-diff-line-no xy-diff-line-new", text: line.newLine === null ? "" : String(line.newLine) });
+      row.createSpan({ cls: "xy-diff-marker", text: line.marker });
+      row.createSpan({ cls: "xy-diff-content", text: line.text || " " });
     }
   }
 
   private renderProcessEditSummary(container: HTMLElement, message: ChatMessage): void {
-    const list = container.createDiv({ cls: "codex-process-edit-list" });
+    const list = container.createDiv({ cls: "xy-process-edit-list" });
     for (const file of message.diffSummary?.files ?? []) {
-      const row = list.createDiv({ cls: "codex-process-edit-row" });
-      row.createSpan({ cls: "codex-process-edit-prefix", text: "已编辑 " });
+      const row = list.createDiv({ cls: "xy-process-edit-row" });
+      row.createSpan({ cls: "xy-process-edit-prefix", text: "已编辑 " });
       const ref = findProcessFileRef(message.files ?? [], file.path) ?? normalizeProcessFileRef(file.path, this.plugin.getVaultPath());
-      this.renderProcessFileTextLink(row, ref, basename(file.path), "codex-process-edit-file");
-      row.createSpan({ cls: "codex-diff-stat codex-diff-stat-add", text: ` +${file.added}` });
-      row.createSpan({ cls: "codex-diff-stat codex-diff-stat-remove", text: ` -${file.removed}` });
+      this.renderProcessFileTextLink(row, ref, basename(file.path), "xy-process-edit-file");
+      row.createSpan({ cls: "xy-diff-stat xy-diff-stat-add", text: ` +${file.added}` });
+      row.createSpan({ cls: "xy-diff-stat xy-diff-stat-remove", text: ` -${file.removed}` });
     }
   }
 
   private renderProcessFileTextLink(container: HTMLElement, file: ProcessFileRef, label: string, extraClass = ""): HTMLElement {
     const link = container.createEl("span", {
-      cls: `codex-process-file-link codex-process-file-link-${file.kind} ${extraClass}`.trim(),
+      cls: `xy-process-file-link xy-process-file-link-${file.kind} ${extraClass}`.trim(),
       text: label,
       attr: {
         role: "button",
@@ -1584,8 +1586,8 @@ export class XiaoyuanView extends ItemView {
   }
 
   private renderDeferredRawText(container: HTMLElement, message: ChatMessage, fallback: string): void {
-    const status = container.createDiv({ cls: "codex-process-raw-loading", text: "正在加载全文..." });
-    const pre = container.createEl("pre", { cls: "codex-process-fulltext" });
+    const status = container.createDiv({ cls: "xy-process-raw-loading", text: "正在加载全文..." });
+    const pre = container.createEl("pre", { cls: "xy-process-fulltext" });
     pre.setText(displayTextForMessage(message) || fallback);
     void this.loadRawText(message)
       .then((text) => {
@@ -1600,15 +1602,15 @@ export class XiaoyuanView extends ItemView {
   }
 
   private renderRawMessageExpander(container: HTMLElement, message: ChatMessage): void {
-    const details = container.createEl("details", { cls: "codex-raw-message-details" });
+    const details = container.createEl("details", { cls: "xy-raw-message-details" });
     details.createEl("summary", { text: this.rawMetaLabel(message) });
     let loaded = false;
     details.ontoggle = () => {
       if (!details.open || loaded) return;
       loaded = true;
-      const body = details.createDiv({ cls: "codex-raw-message-body" });
-      body.createDiv({ cls: "codex-process-raw-loading", text: "正在加载全文..." });
-      const pre = body.createEl("pre", { cls: "codex-process-fulltext" });
+      const body = details.createDiv({ cls: "xy-raw-message-body" });
+      body.createDiv({ cls: "xy-process-raw-loading", text: "正在加载全文..." });
+      const pre = body.createEl("pre", { cls: "xy-process-fulltext" });
       this.scheduleMeasureVirtualRows();
       void this.loadRawText(message)
         .then((text) => {
@@ -1624,7 +1626,7 @@ export class XiaoyuanView extends ItemView {
   }
 
   private renderPlainTextBlock(container: HTMLElement, text: string): void {
-    const pre = container.createEl("pre", { cls: "codex-process-fulltext" });
+    const pre = container.createEl("pre", { cls: "xy-process-fulltext" });
     pre.setText(text);
   }
 
@@ -1655,7 +1657,7 @@ export class XiaoyuanView extends ItemView {
   private renderProcessFileChips(container: HTMLElement, files: ProcessFileRef[]): void {
     for (const file of files) {
       const chip = container.createEl("button", {
-        cls: `codex-process-file-chip codex-process-file-${file.kind}`,
+        cls: `xy-process-file-chip xy-process-file-${file.kind}`,
         attr: {
           type: "button",
           title: file.openable ? file.displayPath : `${file.displayPath}（无法打开）`,
@@ -1663,9 +1665,9 @@ export class XiaoyuanView extends ItemView {
         }
       });
       chip.toggleClass("is-disabled", !file.openable);
-      const icon = chip.createSpan({ cls: "codex-process-file-icon" });
+      const icon = chip.createSpan({ cls: "xy-process-file-icon" });
       setIcon(icon, file.kind === "external" ? "folder-open" : "file-text");
-      chip.createSpan({ cls: "codex-process-file-name", text: file.name });
+      chip.createSpan({ cls: "xy-process-file-name", text: file.name });
       chip.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1703,9 +1705,9 @@ export class XiaoyuanView extends ItemView {
     const knowledgeManager = this.plugin.getKnowledgeBaseManager();
     const knowledgeTaskRunning = knowledgeSession && Boolean(knowledgeManager?.isRunning);
 
-    const row = this.toolbarEl.createDiv({ cls: "codex-composer-row" });
-    const left = row.createDiv({ cls: "codex-composer-left" });
-    const right = row.createDiv({ cls: "codex-composer-right" });
+    const row = this.toolbarEl.createDiv({ cls: "xy-composer-row" });
+    const left = row.createDiv({ cls: "xy-composer-left" });
+    const right = row.createDiv({ cls: "xy-composer-right" });
 
     const addButton = this.createComposerIconButton(left, "plus", "添加内容");
     addButton.onclick = (event) => this.openAddMenu(event);
@@ -1724,24 +1726,11 @@ export class XiaoyuanView extends ItemView {
       const fileButton = this.createComposerIconButton(left, "file-plus", "文件收藏");
       fileButton.onclick = () => this.pickKnowledgeBaseFiles();
 
-      if (this.resolvedKnowledgeBackend() === "codex-cli") {
-        const modelButton = right.createEl("button", {
-          cls: "codex-composer-model-button",
-          attr: { type: "button", "aria-label": "知识库模型和思考强度", title: this.currentKnowledgeComposerSummaryTitle() }
-        });
-        const modelIcon = modelButton.createSpan({ cls: "codex-composer-model-icon" });
-        setIcon(modelIcon, "zap");
-        modelButton.createSpan({ cls: "codex-composer-model-text", text: this.currentComposerSummary() });
-        const modelChevron = modelButton.createSpan({ cls: "codex-composer-chevron" });
-        setIcon(modelChevron, "chevron-down");
-        modelButton.onclick = (event) => this.openKnowledgeModelMenu(event);
-      }
-
-      const kbChip = right.createEl("button", { cls: "codex-composer-model-button codex-kb-channel-chip", attr: { type: "button", title: "知识库常用命令" } });
-      const kbIcon = kbChip.createSpan({ cls: "codex-composer-model-icon" });
+      const kbChip = right.createEl("button", { cls: "xy-composer-model-button xy-kb-channel-chip", attr: { type: "button", title: "知识库常用命令" } });
+      const kbIcon = kbChip.createSpan({ cls: "xy-composer-model-icon" });
       setIcon(kbIcon, "library");
-      kbChip.createSpan({ cls: "codex-composer-model-text", text: knowledgeTaskRunning ? "知识库运行中" : "知识库命令" });
-      const chevron = kbChip.createSpan({ cls: "codex-composer-chevron" });
+      kbChip.createSpan({ cls: "xy-composer-model-text", text: knowledgeTaskRunning ? "知识库运行中" : "知识库命令" });
+      const chevron = kbChip.createSpan({ cls: "xy-composer-chevron" });
       setIcon(chevron, "chevron-down");
       kbChip.onclick = (event) => this.openKnowledgeCommandMenu(event);
     } else {
@@ -1749,22 +1738,22 @@ export class XiaoyuanView extends ItemView {
         this.selectedPermission = value;
         this.persistComposerDefaults();
         this.renderToolbar();
-      }, "权限", "codex-permission-control");
+      }, "权限", "xy-permission-control");
       this.addWorkspaceButton(left, session);
 
-      this.contextEl = right.createDiv({ cls: "codex-context-meter", attr: { title: "上下文容量" } });
-      this.contextRingEl = this.contextEl.createSpan({ cls: "codex-context-ring", attr: { "aria-hidden": "true" } });
-      this.contextRingEl.createSpan({ cls: "codex-context-ring-hole" });
-      this.contextValueEl = this.contextEl.createSpan({ cls: "codex-context-value", text: "--" });
+      this.contextEl = right.createDiv({ cls: "xy-context-meter", attr: { title: "上下文容量" } });
+      this.contextRingEl = this.contextEl.createSpan({ cls: "xy-context-ring", attr: { "aria-hidden": "true" } });
+      this.contextRingEl.createSpan({ cls: "xy-context-ring-hole" });
+      this.contextValueEl = this.contextEl.createSpan({ cls: "xy-context-value", text: "--" });
 
       const modelButton = right.createEl("button", {
-        cls: "codex-composer-model-button",
+        cls: "xy-composer-model-button",
         attr: { type: "button", "aria-label": "模型和运行参数", title: this.currentComposerSummaryTitle() }
       });
-      const modelIcon = modelButton.createSpan({ cls: "codex-composer-model-icon" });
+      const modelIcon = modelButton.createSpan({ cls: "xy-composer-model-icon" });
       setIcon(modelIcon, "zap");
-      modelButton.createSpan({ cls: "codex-composer-model-text", text: this.currentComposerSummary() });
-      const chevron = modelButton.createSpan({ cls: "codex-composer-chevron" });
+      modelButton.createSpan({ cls: "xy-composer-model-text", text: this.currentComposerSummary() });
+      const chevron = modelButton.createSpan({ cls: "xy-composer-chevron" });
       setIcon(chevron, "chevron-down");
       modelButton.onclick = (event) => this.openModelMenu(event);
 
@@ -1778,7 +1767,7 @@ export class XiaoyuanView extends ItemView {
     };
     const busy = composerIsBusy(composerState);
     const sendButton = row.createEl("button", {
-      cls: "codex-send-button codex-composer-send-button",
+      cls: "xy-send-button xy-composer-send-button",
       attr: { type: "button", "aria-label": busy ? "停止" : "发送", title: busy ? "停止" : "发送" }
     });
     setIcon(sendButton, busy ? "square" : "send-horizontal");
@@ -1793,7 +1782,7 @@ export class XiaoyuanView extends ItemView {
 
   private createComposerIconButton(container: HTMLElement, iconName: string, title: string): HTMLButtonElement {
     const button = container.createEl("button", {
-      cls: "codex-composer-icon-button",
+      cls: "xy-composer-icon-button",
       attr: { type: "button", "aria-label": title, title }
     });
     setIcon(button, iconName);
@@ -1801,11 +1790,11 @@ export class XiaoyuanView extends ItemView {
   }
 
   private addComposerSelect<T extends string>(container: HTMLElement, iconName: string, values: T[], selected: T, onChange: (value: T) => void, label: string, extraClass = ""): void {
-    const control = container.createDiv({ cls: `codex-composer-select ${extraClass}`.trim(), attr: { title: label } });
+    const control = container.createDiv({ cls: `xy-composer-select ${extraClass}`.trim(), attr: { title: label } });
     control.toggleClass("is-danger", selected === "danger-full-access");
-    const icon = control.createSpan({ cls: "codex-composer-select-icon" });
+    const icon = control.createSpan({ cls: "xy-composer-select-icon" });
     setIcon(icon, iconName);
-    const select = control.createEl("select", { cls: "codex-select codex-composer-native-select", attr: { "aria-label": label, title: label } });
+    const select = control.createEl("select", { cls: "xy-select xy-composer-native-select", attr: { "aria-label": label, title: label } });
     for (const value of values) select.createEl("option", { text: labelFor(value), value });
     select.value = selected;
     select.onchange = () => onChange(select.value as T);
@@ -1818,15 +1807,15 @@ export class XiaoyuanView extends ItemView {
       ? `工作区：${workspacePath}${valid ? "" : "\n文件夹不存在，请重新选择"}`
       : "选择文件夹作为本会话工作区";
     const button = container.createEl("button", {
-      cls: "codex-composer-model-button codex-workspace-button",
+      cls: "xy-composer-model-button xy-workspace-button",
       attr: { type: "button", title, "aria-label": "选择工作区" }
     });
     button.toggleClass("is-missing", !workspacePath);
     button.toggleClass("is-invalid", Boolean(workspacePath && !valid));
-    const icon = button.createSpan({ cls: "codex-composer-model-icon" });
+    const icon = button.createSpan({ cls: "xy-composer-model-icon" });
     setIcon(icon, workspacePath ? "folder-open" : "folder-plus");
-    button.createSpan({ cls: "codex-composer-model-text", text: workspacePath ? workspaceDisplayName(workspacePath) : "选工作区" });
-    const chevron = button.createSpan({ cls: "codex-composer-chevron" });
+    button.createSpan({ cls: "xy-composer-model-text", text: workspacePath ? workspaceDisplayName(workspacePath) : "选工作区" });
+    const chevron = button.createSpan({ cls: "xy-composer-chevron" });
     setIcon(chevron, "chevron-down");
     button.onclick = (event) => this.openWorkspaceMenu(event, session);
   }
@@ -1966,7 +1955,7 @@ export class XiaoyuanView extends ItemView {
     if (!this.isKnowledgeBaseSession(session)) return;
     await this.plugin.saveSettings(true);
     const index = await this.plugin.readKnowledgeBaseHistoryIndex().catch((error) => {
-      console.error("Codex knowledge history read failed", error);
+      console.error("OpenCode knowledge history read failed", error);
       return null;
     });
     const historySession = index?.sessions.find((item) => item.sessionId === session.id);
@@ -2054,7 +2043,7 @@ export class XiaoyuanView extends ItemView {
     const effectiveModel = this.effectiveModel();
     const models = providerModels.length
       ? ensureModelChoices([], ...providerModels)
-      : ensureModelChoices(this.plugin.lastStatus?.models ?? [], this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
+      : ensureModelChoices((this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName })), this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
     menu.addItem((item) => item.setTitle("知识库模型").setIsLabel(true));
     if (!providerModels.length) {
       menu.addItem((item) =>
@@ -2113,7 +2102,7 @@ export class XiaoyuanView extends ItemView {
     const effectiveModel = this.effectiveModel();
     const models = providerModels.length
       ? ensureModelChoices([], ...providerModels)
-      : ensureModelChoices(this.plugin.lastStatus?.models ?? [], this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
+      : ensureModelChoices((this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName })), this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
     menu.addItem((item) => item.setTitle("模型").setIsLabel(true));
     if (!providerModels.length) {
       menu.addItem((item) =>
@@ -2212,7 +2201,7 @@ export class XiaoyuanView extends ItemView {
     this.plugin.settings.defaultPermission = this.selectedPermission;
     this.plugin.settings.defaultMode = this.selectedMode;
     void this.plugin.saveSettings(true).catch((error) => {
-      console.error("Codex composer defaults save failed", error);
+      console.error("OpenCode composer defaults save failed", error);
       new Notice(`运行参数保存失败：${error instanceof Error ? error.message : String(error)}`);
     });
   }
@@ -2244,7 +2233,7 @@ export class XiaoyuanView extends ItemView {
     const name = await textInputModal(this.app, "重命名会话", "名称", session.title);
     if (!name) return;
     session.title = name;
-    if (session.threadId) await this.plugin.codex?.setThreadName(session.threadId, name).catch(() => undefined);
+    if (session.threadId) await this.plugin.openCode?.setThreadName(session.threadId, name).catch(() => undefined);
     await this.plugin.saveSettings();
     this.renderTabs();
   }
@@ -2272,26 +2261,26 @@ export class XiaoyuanView extends ItemView {
   }
 
   private createToolbarControl(container: HTMLElement, iconName: string, label: string): HTMLElement {
-    const control = container.createDiv({ cls: "codex-control", attr: { title: label } });
-    const icon = control.createSpan({ cls: "codex-control-icon" });
+    const control = container.createDiv({ cls: "xy-control", attr: { title: label } });
+    const icon = control.createSpan({ cls: "xy-control-icon" });
     setIcon(icon, iconName);
     return control;
   }
 
   private createActionButton(container: HTMLElement, iconName: string, label: string, title: string): HTMLButtonElement {
     const button = container.createEl("button", {
-      cls: "codex-toolbar-button codex-action-button",
+      cls: "xy-toolbar-button xy-action-button",
       attr: { type: "button", "aria-label": title, title }
     });
-    const icon = button.createSpan({ cls: "codex-action-icon" });
+    const icon = button.createSpan({ cls: "xy-action-icon" });
     setIcon(icon, iconName);
-    button.createSpan({ cls: "codex-action-label", text: label });
+    button.createSpan({ cls: "xy-action-label", text: label });
     return button;
   }
 
   private addSelect<T extends string>(container: HTMLElement, iconName: string, values: T[], selected: T, onChange: (value: T) => void, label: string): void {
     const control = this.createToolbarControl(container, iconName, label);
-    const select = control.createEl("select", { cls: "codex-select", attr: { "aria-label": label, title: label } });
+    const select = control.createEl("select", { cls: "xy-select", attr: { "aria-label": label, title: label } });
     for (const value of values) select.createEl("option", { text: labelFor(value), value });
     select.value = selected;
     select.onchange = () => onChange(select.value as T);
@@ -2303,7 +2292,7 @@ export class XiaoyuanView extends ItemView {
     const all = [...(this.selectedSkill ? [{ type: "file" as const, name: `/${this.selectedSkill.name}`, path: this.selectedSkill.path }] : []), ...this.attachments];
     this.attachmentsEl.toggleClass("is-empty", all.length === 0);
     for (const item of all) {
-      const chip = this.attachmentsEl.createDiv({ cls: "codex-attachment-chip" });
+      const chip = this.attachmentsEl.createDiv({ cls: "xy-attachment-chip" });
       chip.createSpan({ text: item.name });
       const remove = chip.createEl("button", { text: "×", attr: { type: "button" } });
       remove.onclick = () => {
@@ -2324,7 +2313,7 @@ export class XiaoyuanView extends ItemView {
     if (!skills.length && !this.skillsRequested) {
       this.skillsRequested = true;
       this.skillMenuEl.empty();
-      this.skillMenuEl.createDiv({ cls: "codex-skill-empty", text: "正在加载 skills..." });
+      this.skillMenuEl.createDiv({ cls: "xy-skill-empty", text: "正在加载 skills..." });
       this.skillMenuEl.addClass("is-visible");
       void this.plugin.ensureSkillsLoaded().then(() => {
         const activeQuery = getSlashQuery(this.inputEl.value);
@@ -2340,9 +2329,9 @@ export class XiaoyuanView extends ItemView {
     const enabledSkills = filterEnabledSkills(this.plugin.lastStatus?.skills ?? [], this.plugin.settings.workspaceResources.skills);
     const matches = filterSkills(enabledSkills, query);
     for (const skill of matches) {
-      const item = this.skillMenuEl.createDiv({ cls: "codex-skill-item" });
-      item.createDiv({ cls: "codex-skill-name", text: `/${skill.name}` });
-      item.createDiv({ cls: "codex-skill-desc", text: skill.description || skill.path });
+      const item = this.skillMenuEl.createDiv({ cls: "xy-skill-item" });
+      item.createDiv({ cls: "xy-skill-name", text: `/${skill.name}` });
+      item.createDiv({ cls: "xy-skill-desc", text: skill.description || skill.path });
       item.onclick = () => {
         this.selectedSkill = skill;
         this.inputEl.value = this.inputEl.value.replace(/(?:^|\s)\/([^\s/]*)$/, "").trimStart();
@@ -2351,7 +2340,7 @@ export class XiaoyuanView extends ItemView {
         this.inputEl.focus();
       };
     }
-    if (matches.length === 0) this.skillMenuEl.createDiv({ cls: "codex-skill-empty", text: "没有匹配的 skill" });
+    if (matches.length === 0) this.skillMenuEl.createDiv({ cls: "xy-skill-empty", text: "没有匹配的 skill" });
     this.skillMenuEl.addClass("is-visible");
   }
 
@@ -2384,7 +2373,7 @@ export class XiaoyuanView extends ItemView {
       if (!workspaceReady) return;
       const status = await this.plugin.ensureOpenCodeConnected();
       this.applyStatus();
-      if (!status.connected) throw new Error(status.errors[0] || "Codex 未连接");
+      if (!status.connected) throw new Error(status.errors[0] || "OpenCode 未连接");
       session = this.ensureSession();
       const runId = newId("run");
       this.activeRunId = runId;
@@ -2414,7 +2403,7 @@ export class XiaoyuanView extends ItemView {
       const turnOptions = this.currentTurnOptions(session);
       this.running = true;
       this.turnStartedAt = Date.now();
-      this.ensureThinkingMessage(session, "连接中", "正在连接 Codex...");
+      this.ensureThinkingMessage(session, "连接中", "正在连接 OpenCode...");
       this.armTurnWatchdog();
       this.applyStatus();
       if (!session.threadId && this.threadPrewarmPromise && this.threadPrewarmSessionId === session.id) {
@@ -2422,20 +2411,20 @@ export class XiaoyuanView extends ItemView {
         if (!warmed && !session.threadId) throw new Error("新会话连接超时，请重试");
       }
       if (!session.threadId) {
-        const started = await this.plugin.codex!.startThread(turnOptions);
+        const started = await this.plugin.openCode!.startThread(turnOptions);
         session.threadId = started.threadId;
       } else {
-        await this.plugin.codex!.resumeThread(session.threadId, turnOptions).catch(async () => {
-          const started = await this.plugin.codex!.startThread(turnOptions);
+        await this.plugin.openCode!.resumeThread(session.threadId, turnOptions).catch(async () => {
+          const started = await this.plugin.openCode!.startThread(turnOptions);
           session.threadId = started.threadId;
         });
       }
       const input = buildUserInput(text, turnAttachments, turnSkill);
-      this.activeTurnId = await this.plugin.codex!.startTurn(session.threadId, input, turnOptions);
+      this.activeTurnId = await this.plugin.openCode!.startTurn(session.threadId, input, turnOptions);
       this.attachTurnIdToRun(session, this.activeTurnId);
       await this.plugin.saveSettings();
     } catch (error) {
-      const diagnostic = this.diagnoseCodexFailure(error);
+      const diagnostic = this.diagnoseOpenCodeFailure(error);
       this.running = false;
       this.activeTurnId = "";
       this.clearTurnWatchdog();
@@ -2447,7 +2436,7 @@ export class XiaoyuanView extends ItemView {
         text: diagnostic.text
       });
       this.clearActiveRun();
-      new Notice(`Codex 发送失败：${diagnostic.title}`);
+      new Notice(`OpenCode 发送失败：${diagnostic.title}`);
     } finally {
       this.applyStatus();
     }
@@ -2595,9 +2584,9 @@ export class XiaoyuanView extends ItemView {
       this.setEditorActionStatus({ status: "connecting", actionLabel: request.action.label, qualityMode: request.qualityMode, modeLabel: request.modeConfig.label, filePath: request.source.filePath, model: request.modeConfig.model, startedAt: requestStartedAt });
       const status = await this.withEditorActionTimeout(this.plugin.ensureOpenCodeConnected(false, { silent: true }), timeoutMs, "写作操作连接超时");
       this.applyStatus();
-      if (!status.connected) throw new Error(status.errors[0] || "Codex 未连接");
+      if (!status.connected) throw new Error(status.errors[0] || "OpenCode 未连接");
 
-      const availableModels = status.models.map((model) => model.model);
+      const availableModels = status.models.map((model) => model.modelId);
       const model = this.effectiveEditorActionModel(availableModels, request.modeConfig.model);
       const understanding = await this.ensureArticleUnderstanding(request, availableModels, model, timeoutMs);
       const snapshot = understanding
@@ -2639,7 +2628,7 @@ export class XiaoyuanView extends ItemView {
       this.prewarmEditorActionThread();
       return result;
     } catch (error) {
-      const diagnostic = this.diagnoseCodexFailure(error);
+      const diagnostic = this.diagnoseOpenCodeFailure(error);
       this.rejectEditorActionRun(new Error(diagnostic.text));
       this.running = false;
       this.activeTurnId = "";
@@ -2763,7 +2752,7 @@ export class XiaoyuanView extends ItemView {
       });
       this.editorActionThreadId = await this.withEditorActionTimeout(this.takeEditorActionThread(turnOptions), input.timeoutMs, "写作操作启动超时");
       this.editorActionThreadIds.add(this.editorActionThreadId);
-      this.activeTurnId = await this.withEditorActionTimeout(this.plugin.codex!.startTurn(this.editorActionThreadId, buildEditorActionUserInput(input.prompt), turnOptions), input.timeoutMs, "写作操作启动超时");
+      this.activeTurnId = await this.withEditorActionTimeout(this.plugin.openCode!.startTurn(this.editorActionThreadId, buildEditorActionUserInput(input.prompt), turnOptions), input.timeoutMs, "写作操作启动超时");
       if (this.activeTurnId) this.editorActionTurnIds.add(this.activeTurnId);
       const result = await waitForResult;
       this.releaseEditorActionRunLock(runId);
@@ -2771,9 +2760,9 @@ export class XiaoyuanView extends ItemView {
     } catch (error) {
       void waitForResult.catch(() => undefined);
       if (this.editorActionThreadId && this.activeTurnId) {
-        void this.plugin.codex?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => undefined);
+        void this.plugin.openCode?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => undefined);
       }
-      this.rejectEditorActionRun(new Error(this.diagnoseCodexFailure(error, input.model).text));
+      this.rejectEditorActionRun(new Error(this.diagnoseOpenCodeFailure(error, input.model).text));
       this.releaseEditorActionRunLock(runId);
       throw error;
     }
@@ -2794,7 +2783,7 @@ export class XiaoyuanView extends ItemView {
     const settings = this.plugin.settings.editorActions;
     const mode = settings.qualityMode;
     const modeConfig = resolveEditorActionModeConfig(settings, mode);
-    const availableModels = this.plugin.lastStatus?.models.map((item) => item.model) ?? [];
+    const availableModels = this.plugin.lastStatus?.models.map((item) => item.modelId) ?? [];
     const model = this.effectiveEditorActionModel(availableModels, modeConfig.model);
     const cachedEntry = settings.articleUnderstandingCache[source.filePath] ?? null;
     const cacheResolution = mode === "fast"
@@ -2839,8 +2828,8 @@ export class XiaoyuanView extends ItemView {
     this.editorActionHarnessRunId = harnessRunId;
     try {
       const status = await this.plugin.ensureOpenCodeConnected(false, { silent: true });
-      if (!status.connected) throw new Error("Codex 未连接");
-      const model = this.effectiveEditorActionModel(status.models.map((item) => item.model), modeConfig.model);
+      if (!status.connected) throw new Error("OpenCode 未连接");
+      const model = this.effectiveEditorActionModel(status.models.map((item) => item.modelId), modeConfig.model);
       const request: EditorActionRequest = {
         id: newId("editor-action-refresh"),
         action: { id: "rewrite", label: "理解文章", enabled: true, promptTemplate: "" },
@@ -2862,7 +2851,7 @@ export class XiaoyuanView extends ItemView {
         prompt: "",
         createdAt: Date.now()
       };
-      await this.ensureArticleUnderstanding(request, status.models.map((item) => item.model), model, editorActionTimeoutForMode(settings.timeoutMs, mode), true);
+      await this.ensureArticleUnderstanding(request, status.models.map((item) => item.modelId), model, editorActionTimeoutForMode(settings.timeoutMs, mode), true);
       this.setEditorActionStatus({
         status: "idle",
         qualityMode: mode,
@@ -2929,7 +2918,7 @@ export class XiaoyuanView extends ItemView {
   private async stopTurn(): Promise<void> {
     if (this.isEditorActionRunActive()) {
       if (this.editorActionThreadId && this.activeTurnId) {
-        await this.plugin.codex?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => undefined);
+        await this.plugin.openCode?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => undefined);
       }
       this.rejectEditorActionRun(new Error("写作操作已中断"));
       this.running = false;
@@ -2943,7 +2932,7 @@ export class XiaoyuanView extends ItemView {
     }
     const session = this.activeRunSession();
     if (!session.threadId || !this.activeTurnId) return;
-    await this.plugin.codex?.interruptTurn(session.threadId, this.activeTurnId).catch(() => undefined);
+    await this.plugin.openCode?.interruptTurn(session.threadId, this.activeTurnId).catch(() => undefined);
     if (this.editorActionRun?.runId === this.activeRunId) this.rejectEditorActionRun(new Error("写作操作已中断"));
     this.running = false;
     this.activeTurnId = "";
@@ -2976,7 +2965,7 @@ export class XiaoyuanView extends ItemView {
       this.running = false;
       if (this.isEditorActionRunActive()) {
         if (timedOutThreadId && timedOutTurnId) {
-          void this.plugin.codex?.interruptTurn(timedOutThreadId, timedOutTurnId).catch(() => undefined);
+          void this.plugin.openCode?.interruptTurn(timedOutThreadId, timedOutTurnId).catch(() => undefined);
         }
         this.rejectEditorActionRun(new Error("写作操作响应超时"));
         this.setEditorActionStatus({ status: "failed", message: "响应超时", error: "写作操作响应超时" });
@@ -2991,7 +2980,7 @@ export class XiaoyuanView extends ItemView {
       const session = this.activeRunSession();
       const knowledgeSession = this.isKnowledgeBaseSession(session);
       if (knowledgeSession && session.threadId && timedOutTurnId) {
-        void this.plugin.codex?.interruptTurn(session.threadId, timedOutTurnId).catch(() => undefined);
+        void this.plugin.openCode?.interruptTurn(session.threadId, timedOutTurnId).catch(() => undefined);
       }
       this.finishThinkingMessage(session, "失败");
       this.finishRunningProcessMessages(session, "error");
@@ -3028,7 +3017,7 @@ export class XiaoyuanView extends ItemView {
   }
 
   private editorActionStartBlockReason(): string | null {
-    if (this.editorActionHarnessRunId) return "Codex 正在处理上一轮，请稍后再试";
+    if (this.editorActionHarnessRunId) return "正在处理上一轮，请稍后再试";
     const reason = editorActionStartBlockReason({
       running: this.running,
       activeRunId: this.activeRunId,
@@ -3066,7 +3055,7 @@ export class XiaoyuanView extends ItemView {
         return threadId;
       }
     }
-    const started = await this.plugin.codex!.startThread(turnOptions);
+    const started = await this.plugin.openCode!.startThread(turnOptions);
     this.editorActionThreadIds.add(started.threadId);
     return started.threadId;
   }
@@ -3082,18 +3071,18 @@ export class XiaoyuanView extends ItemView {
 
   private async createEditorActionPrewarmThread(): Promise<string | null> {
     const status = await this.plugin.ensureOpenCodeConnected(false, { silent: true });
-    if (!status.connected || !this.plugin.codex || this.running) return null;
+    if (!status.connected || !this.plugin.openCode || this.running) return null;
     const modeConfig = resolveEditorActionModeConfig(this.plugin.settings.editorActions);
     const turnOptions = {
       ...buildEditorActionTurnOptions({
-        model: this.effectiveEditorActionModel(status.models.map((model) => model.model), modeConfig.model),
+        model: this.effectiveEditorActionModel(status.models.map((model) => model.modelId), modeConfig.model),
         serviceTier: this.selectedServiceTier,
         timeoutMs: this.plugin.settings.editorActions.timeoutMs,
         workspaceResources: { plugins: {}, mcpServers: {}, skills: {} }
       }),
       requestTimeoutMs: 15000
     };
-    const started = await this.plugin.codex.startThread(turnOptions);
+    const started = await this.plugin.openCode.startThread(turnOptions);
     if (this.running || this.editorActionPrewarmThreadId) return null;
     this.editorActionThreadIds.add(started.threadId);
     this.editorActionPrewarmThreadId = started.threadId;
@@ -3122,7 +3111,7 @@ export class XiaoyuanView extends ItemView {
     const run = this.editorSummaryRun;
     if (!run) return;
     if (run.threadId && this.activeRunId === run.runId && this.activeTurnId) {
-      void this.plugin.codex?.interruptTurn(run.threadId, this.activeTurnId).catch(() => undefined);
+      void this.plugin.openCode?.interruptTurn(run.threadId, this.activeTurnId).catch(() => undefined);
     }
     this.rejectEditorSummaryRun(new Error(reason));
     this.releaseEditorSummaryRunLock(run.runId);
@@ -3134,7 +3123,7 @@ export class XiaoyuanView extends ItemView {
       const run = this.editorSummaryRun;
       if (!run) return;
       if (run.threadId && this.activeTurnId) {
-        void this.plugin.codex?.interruptTurn(run.threadId, this.activeTurnId).catch(() => undefined);
+        void this.plugin.openCode?.interruptTurn(run.threadId, this.activeTurnId).catch(() => undefined);
       }
       this.rejectEditorSummaryRun(new Error("摘要生成超时"));
       this.releaseEditorSummaryRunLock(run.runId);
@@ -3231,11 +3220,6 @@ export class XiaoyuanView extends ItemView {
     return provider ? getApiProviderModels(provider) : [];
   }
 
-  private resolvedKnowledgeBackend(): "codex-cli" | "opencode" {
-    const configured = this.plugin.settings.knowledgeBase.backend;
-    return configured === "default" ? this.plugin.settings.agentBackend : configured;
-  }
-
   private effectiveModel(): string {
     const providerModels = this.activeProviderModels();
     if (providerModels.length) {
@@ -3274,8 +3258,8 @@ export class XiaoyuanView extends ItemView {
     if (session.threadId) return true;
     if (!normalizeWorkspacePath(session.cwd) || !workspaceDirectoryExists(session.cwd)) return false;
     const status = await this.plugin.ensureOpenCodeConnected();
-    if (!status.connected || !this.plugin.codex || session.threadId) return Boolean(session.threadId);
-    const started = await this.plugin.codex.startThread(this.currentTurnOptions(session));
+    if (!status.connected || !this.plugin.openCode || session.threadId) return Boolean(session.threadId);
+    const started = await this.plugin.openCode.startThread(this.currentTurnOptions(session));
     session.threadId = started.threadId;
     await this.plugin.saveSettings();
     return true;
@@ -3610,7 +3594,7 @@ export class XiaoyuanView extends ItemView {
     if (!this.plugin.settings.showContext) return;
     const view = contextUsageView(tokenUsage);
     this.contextValueEl.setText(view.label);
-    this.contextEl.style.setProperty("--codex-context-angle", `${view.angle}deg`);
+    this.contextEl.style.setProperty("--xy-context-angle", `${view.angle}deg`);
     this.contextEl.setAttr("aria-label", view.title);
     this.contextEl.setAttr("title", view.title);
     this.contextEl.toggleClass("is-empty", view.percent === null);
@@ -3622,48 +3606,48 @@ export class XiaoyuanView extends ItemView {
     this.mcpPanelEl.toggleClass("is-visible", willOpen);
     if (!willOpen) return;
     this.mcpPanelEl.empty();
-    this.mcpPanelEl.createDiv({ cls: "codex-mcp-title", text: "MCP 状态" });
-    this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "正在读取 MCP 状态..." });
+    this.mcpPanelEl.createDiv({ cls: "xy-mcp-title", text: "MCP 状态" });
+    this.mcpPanelEl.createDiv({ cls: "xy-mcp-empty", text: "正在读取 MCP 状态..." });
     const status = await this.plugin.ensureOpenCodeConnected();
-    if (!status.connected || !this.plugin.codex) {
-      this.renderMcpPanel([], "Codex 未连接");
+    if (!status.connected || !this.plugin.openCode) {
+      this.renderMcpPanel([], "OpenCode 未连接");
       return;
     }
-    const result = await this.plugin.codex.refreshMcpStatus();
+    const result = await this.plugin.openCode.refreshMcpStatus();
     if (this.plugin.lastStatus) this.plugin.lastStatus.mcpServers = result.servers;
     this.renderMcpPanel(result.servers, result.error);
   }
 
   private renderMcpPanel(servers: McpServerStatus[], error: string | null): void {
     this.mcpPanelEl.empty();
-    this.mcpPanelEl.createDiv({ cls: "codex-mcp-title", text: "MCP 状态" });
+    this.mcpPanelEl.createDiv({ cls: "xy-mcp-title", text: "MCP 状态" });
     if (error) {
-      this.mcpPanelEl.createDiv({ cls: "codex-mcp-error", text: `读取失败：${error}` });
-      const retry = this.mcpPanelEl.createEl("button", { cls: "codex-mcp-retry", text: "重新读取 MCP", attr: { type: "button" } });
+      this.mcpPanelEl.createDiv({ cls: "xy-mcp-error", text: `读取失败：${error}` });
+      const retry = this.mcpPanelEl.createEl("button", { cls: "xy-mcp-retry", text: "重新读取 MCP", attr: { type: "button" } });
       retry.onclick = () => {
         this.mcpPanelEl.removeClass("is-visible");
         void this.toggleMcpPanel();
       };
     }
     if (!this.plugin.settings.mcpEnabled && servers.length) {
-      this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "已读取到 MCP 服务。聊天 MCP 总开关关闭，下一轮对话暂不调用 MCP。" });
+      this.mcpPanelEl.createDiv({ cls: "xy-mcp-empty", text: "已读取到 MCP 服务。聊天 MCP 总开关关闭，下一轮对话暂不调用 MCP。" });
     }
     if (!servers.length) {
-      if (!error) this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "没有读取到 MCP 服务器。" });
+      if (!error) this.mcpPanelEl.createDiv({ cls: "xy-mcp-empty", text: "没有读取到 MCP 服务器。" });
       return;
     }
     for (const server of servers) this.renderMcpServer(server);
   }
 
   private renderMcpServer(server: McpServerStatus): void {
-    const row = this.mcpPanelEl.createDiv({ cls: "codex-mcp-row" });
-    row.createDiv({ cls: "codex-mcp-name", text: server.name });
-    row.createDiv({ cls: "codex-mcp-meta", text: `${Object.keys(server.tools ?? {}).length} 个工具 · ${server.authStatus ?? "unknown"}` });
+    const row = this.mcpPanelEl.createDiv({ cls: "xy-mcp-row" });
+    row.createDiv({ cls: "xy-mcp-name", text: server.name });
+    row.createDiv({ cls: "xy-mcp-meta", text: `${Object.keys(server.tools ?? {}).length} 个工具 · ${server.authStatus ?? "unknown"}` });
     if (server.authStatus === "notLoggedIn") {
-      const login = row.createEl("button", { cls: "codex-toolbar-button", text: "登录", attr: { type: "button" } });
+      const login = row.createEl("button", { cls: "xy-toolbar-button", text: "登录", attr: { type: "button" } });
       login.onclick = async () => {
         try {
-          const url = await this.plugin.codex?.startMcpOAuth(server.name);
+          const url = await this.plugin.openCode?.startMcpOAuth(server.name);
           if (url) window.open(url);
           else new Notice("没有拿到 MCP 登录链接");
         } catch (error) {
@@ -3686,7 +3670,7 @@ export class XiaoyuanView extends ItemView {
   private addContextCompactionMessage(session: StoredSession): void {
     const last = session.messages[session.messages.length - 1];
     if (last?.itemType === "contextCompaction" && Date.now() - last.createdAt < 10_000) return;
-    this.addMessageToSession(session, { role: "system", title: "上下文压缩", itemType: "contextCompaction", text: "Codex 已自动压缩上下文。", createdAt: Date.now() });
+    this.addMessageToSession(session, { role: "system", title: "上下文压缩", itemType: "contextCompaction", text: "OpenCode 已自动压缩上下文。", createdAt: Date.now() });
   }
 
   private clearActiveRun(): void {
@@ -3744,7 +3728,7 @@ export class XiaoyuanView extends ItemView {
   private measureVisibleVirtualRows(forceBottom = false): boolean {
     if (!this.virtualListEl) return false;
     let changed = false;
-    for (const rowEl of Array.from(this.virtualListEl.querySelectorAll<HTMLElement>(".codex-virtual-row"))) {
+    for (const rowEl of Array.from(this.virtualListEl.querySelectorAll<HTMLElement>(".xy-virtual-row"))) {
       const id = rowEl.dataset.rowId;
       if (!id) continue;
       const height = Math.ceil(rowEl.getBoundingClientRect().height);
@@ -3890,7 +3874,7 @@ export class XiaoyuanView extends ItemView {
       this.attachments.push(...pasted);
       this.renderAttachments();
     } catch (error) {
-      console.error("Codex paste image failed", error);
+      console.error("OpenCode paste image failed", error);
       new Notice("粘贴图片失败");
     }
   }
@@ -3920,17 +3904,17 @@ class KnowledgeBaseHistoryModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("codex-kb-history-modal");
-    const header = contentEl.createDiv({ cls: "codex-kb-history-header" });
+    contentEl.addClass("xy-kb-history-modal");
+    const header = contentEl.createDiv({ cls: "xy-kb-history-header" });
     header.createEl("h2", { text: "历史" });
-    header.createDiv({ cls: "codex-kb-history-summary", text: `${this.days.length} 天记录 · 按天聚合` });
+    header.createDiv({ cls: "xy-kb-history-summary", text: `${this.days.length} 天记录 · 按天聚合` });
 
-    const layout = contentEl.createDiv({ cls: "codex-kb-history-layout" });
-    this.dateListEl = layout.createDiv({ cls: "codex-kb-history-days" });
-    const main = layout.createDiv({ cls: "codex-kb-history-main" });
-    this.filterEl = main.createDiv({ cls: "codex-kb-history-actions" });
-    this.activeDateEl = main.createDiv({ cls: "codex-kb-history-current-day" });
-    this.listEl = main.createDiv({ cls: "codex-kb-history-list" });
+    const layout = contentEl.createDiv({ cls: "xy-kb-history-layout" });
+    this.dateListEl = layout.createDiv({ cls: "xy-kb-history-days" });
+    const main = layout.createDiv({ cls: "xy-kb-history-main" });
+    this.filterEl = main.createDiv({ cls: "xy-kb-history-actions" });
+    this.activeDateEl = main.createDiv({ cls: "xy-kb-history-current-day" });
+    this.listEl = main.createDiv({ cls: "xy-kb-history-list" });
     this.renderDates();
     this.renderFilters();
     void this.selectDate(this.activeDate);
@@ -3938,7 +3922,7 @@ class KnowledgeBaseHistoryModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
-    this.contentEl.removeClass("codex-kb-history-modal");
+    this.contentEl.removeClass("xy-kb-history-modal");
   }
 
   private renderDates(): void {
@@ -3946,7 +3930,7 @@ class KnowledgeBaseHistoryModal extends Modal {
     this.dateListEl.empty();
     for (const day of this.days) {
       const button = this.dateListEl.createEl("button", {
-        cls: `codex-kb-history-day ${day.date === this.activeDate ? "is-active" : ""}`.trim(),
+        cls: `xy-kb-history-day ${day.date === this.activeDate ? "is-active" : ""}`.trim(),
         attr: { type: "button" }
       });
       button.createSpan({ text: day.date });
@@ -3967,7 +3951,7 @@ class KnowledgeBaseHistoryModal extends Modal {
     };
     for (const filter of Object.keys(labels) as KnowledgeBaseHistoryFilter[]) {
       const button = this.filterEl.createEl("button", {
-        cls: `codex-resource-tab ${filter === this.activeFilter ? "is-active" : ""}`.trim(),
+        cls: `xy-resource-tab ${filter === this.activeFilter ? "is-active" : ""}`.trim(),
         text: labels[filter],
         attr: { type: "button" }
       });
@@ -3990,16 +3974,16 @@ class KnowledgeBaseHistoryModal extends Modal {
     this.renderDates();
     if (this.listEl) {
       this.listEl.empty();
-      this.listEl.createDiv({ cls: "codex-kb-history-more", text: "读取中..." });
+      this.listEl.createDiv({ cls: "xy-kb-history-more", text: "读取中..." });
     }
     try {
       this.messages = await this.loadDay(date);
     } catch (error) {
-      console.error("Codex knowledge history day read failed", error);
+      console.error("OpenCode knowledge history day read failed", error);
       this.messages = [];
       if (this.listEl) {
         this.listEl.empty();
-        this.listEl.createDiv({ cls: "codex-kb-history-more", text: "读取失败" });
+        this.listEl.createDiv({ cls: "xy-kb-history-more", text: "读取失败" });
       }
       return;
     }
@@ -4014,17 +3998,17 @@ class KnowledgeBaseHistoryModal extends Modal {
       this.activeDateEl.setText(`${this.activeDate} · ${filtered.length}/${this.messages.length} 条`);
     }
     if (!filtered.length) {
-      this.listEl.createDiv({ cls: "codex-kb-history-more", text: "这一天没有符合筛选的记录。" });
+      this.listEl.createDiv({ cls: "xy-kb-history-more", text: "这一天没有符合筛选的记录。" });
       return;
     }
     for (const message of filtered) {
-      const row = this.listEl.createDiv({ cls: "codex-kb-history-row" });
-      const meta = row.createDiv({ cls: "codex-kb-history-meta" });
+      const row = this.listEl.createDiv({ cls: "xy-kb-history-row" });
+      const meta = row.createDiv({ cls: "xy-kb-history-meta" });
       meta.createSpan({ text: formatAbsoluteTime(message.createdAt) });
       meta.createSpan({ text: roleLabel(message.role) });
       if (message.title) meta.createSpan({ text: message.title });
       if (message.status) meta.createSpan({ text: message.status });
-      row.createDiv({ cls: "codex-kb-history-text", text: compactHistoryText(message) });
+      row.createDiv({ cls: "xy-kb-history-text", text: compactHistoryText(message) });
     }
   }
 }
@@ -4185,7 +4169,7 @@ function editorActionStatusLabel(status: EditorActionStatusView): string {
     return "写作";
   }
   if (status.status === "preparing") return `准备${action}`;
-  if (status.status === "connecting") return "连接 Codex";
+  if (status.status === "connecting") return "连接 OpenCode";
   if (status.status === "generating") {
     const seconds = status.startedAt ? Math.max(0, Math.floor((Date.now() - status.startedAt) / 1000)) : 0;
     if (status.phase === "understanding") return `理解中 ${seconds}s`;
@@ -4243,7 +4227,7 @@ async function pickWorkspaceDirectory(defaultPath: string): Promise<string | nul
   const dialog = electron?.remote?.dialog ?? electron?.dialog;
   if (!dialog?.showOpenDialog) return undefined;
   const result = await dialog.showOpenDialog({
-    title: "选择 Codex 工作区",
+    title: "选择 OpenCode 工作区",
     defaultPath: normalizeWorkspacePath(defaultPath) || undefined,
     properties: ["openDirectory", "createDirectory"]
   });

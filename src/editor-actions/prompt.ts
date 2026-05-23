@@ -3,7 +3,7 @@ import type { EditorActionPromptInput, EditorAiActionSettings, EditorAiStyleConf
 
 export const EDITOR_ACTION_OUTPUT_RULES = [
   "只返回最终候选文本。",
-  "把候选正文放在 <codex-candidate> 和 </codex-candidate> 之间。",
+  "把候选正文放在 <opencode-candidate> 和 </opencode-candidate> 之间。",
   "标签外不要输出任何内容；如果误输出，插件会丢弃。",
   "不要解释。",
   "不要使用代码块包裹。",

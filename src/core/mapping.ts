@@ -1,7 +1,7 @@
 import * as os from "os";
 import * as path from "path";
 import type {
-  CodexSkill,
+  SkillSpec,
   PermissionMode,
   ProcessEventSummary,
   ProcessFileRef,
@@ -59,7 +59,7 @@ export function buildCollaborationMode(mode: UiMode, model: string | null | unde
   };
 }
 
-export function buildUserInput(text: string, attachments: StoredAttachment[], skill?: CodexSkill | null, styleInstruction = DEFAULT_REPLY_STYLE_INSTRUCTION): UserInput[] {
+export function buildUserInput(text: string, attachments: StoredAttachment[], skill?: SkillSpec | null, styleInstruction = DEFAULT_REPLY_STYLE_INSTRUCTION): UserInput[] {
   const input: UserInput[] = [];
   if (skill) {
     input.push({ type: "skill", name: skill.name, path: skill.path });
@@ -102,7 +102,7 @@ export function getSlashQuery(text: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
-export function filterSkills(skills: CodexSkill[], query: string): CodexSkill[] {
+export function filterSkills(skills: SkillSpec[], query: string): SkillSpec[] {
   const q = query.trim().toLowerCase();
   return skills
     .filter((skill) => skill.enabled !== false)

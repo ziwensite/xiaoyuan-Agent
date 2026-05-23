@@ -15,5 +15,5 @@ export function isLintOnlyKnowledgeBaseReport(text: string): boolean {
 
 export function recoveredLintReportSummary(reportPath: string): string {
   const suffix = reportPath.trim() ? `报告：${reportPath.trim()}` : "报告已生成。";
-  return `体检报告已生成。Codex 返回失败状态，但 lint-only 报告文件存在，已恢复为成功。${suffix}`;
+  return `体检报告已生成。OpenCode 返回失败状态，但 lint-only 报告文件存在，已恢复为成功。${suffix}`;
 }

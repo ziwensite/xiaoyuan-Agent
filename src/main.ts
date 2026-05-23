@@ -2,7 +2,7 @@ import * as fsp from "fs/promises";
 import * as path from "path";
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { externalizeLargeMessages, prepareRawMessage, readRawText, writeRawText } from "./core/raw-message-store";
-import { clearLegacyChatWorkspaceDefaults, ensureKnowledgeBaseSession, getActiveApiProvider, normalizeSettingsData, providerConnectionLabel, type ChatMessage, type CodexForObsidianSettings, type ResourceManagementTab } from "./settings/settings";
+import { clearLegacyChatWorkspaceDefaults, ensureKnowledgeBaseSession, getActiveApiProvider, normalizeSettingsData, providerConnectionLabel, type ChatMessage, type XiaoyuanSettings, type ResourceManagementTab } from "./settings/settings";
 import { XiaoyuanAgentSettingTab } from "./settings/settings-tab";
 import { confirmModal, requestUserInputModal } from "./ui/modals";
 import { XiaoyuanView, VIEW_TYPE_XIAOYUAN } from "./ui/xiaoyuan-view";
@@ -27,7 +27,7 @@ import { ReviewManager } from "./review/manager";
 import { ReviewPreviewView, VIEW_TYPE_REVIEW_PREVIEW } from "./review/preview-view";
 import { isReviewHtmlPath } from "./review/schedule";
 import type { AgentModelInfo, AgentProfileInfo } from "./agent/types";
-import type { CodexSkill, McpServerStatus } from "./types/app-server";
+import type { SkillSpec, McpServerStatus, RateLimitSnapshot } from "./types/app-server";
 
 export interface OpenCodeStatusSnapshot {
   connected: boolean;
@@ -35,14 +35,17 @@ export interface OpenCodeStatusSnapshot {
   serverUrl: string;
   models: AgentModelInfo[];
   agents: AgentProfileInfo[];
-  skills: CodexSkill[];
+  skills: SkillSpec[];
   mcpServers: McpServerStatus[];
+  rateLimits?: RateLimitSnapshot | null;
+  rateLimitsByLimitId?: Record<string, RateLimitSnapshot | undefined> | null;
   errors: string[];
 }
 
-export default class CodexForObsidianPlugin extends Plugin {
-  settings!: CodexForObsidianSettings;
+export default class XiaoyuanPlugin extends Plugin {
+  settings!: XiaoyuanSettings;
   lastStatus: OpenCodeStatusSnapshot | null = null;
+  openCode: any = null;
   private view: XiaoyuanView | null = null;
   private reviewPreviewView: ReviewPreviewView | null = null;
   private editorActions: EditorActionController | null = null;
@@ -324,9 +327,9 @@ export default class CodexForObsidianPlugin extends Plugin {
       fsp.readFile(llmWikiPath, "utf8").catch(() => "")
     ]);
     if (!agents || !llmWiki) return false;
-    const agentsLooksLikeCodexMemory = /codex-memory|CODEX-MEMORY|项目级上下文管理/.test(agents);
+    const agentsLooksLikeMemorySkill = /opencode-memory|OPENCODE-MEMORY|项目级上下文管理/.test(agents);
     const llmWikiLooksLikeKnowledgeRules = /知识库|Raw Sources|Ingest|Lint|Wiki/.test(llmWiki);
-    if (!agentsLooksLikeCodexMemory || !llmWikiLooksLikeKnowledgeRules) return false;
+    if (!agentsLooksLikeMemorySkill || !llmWikiLooksLikeKnowledgeRules) return false;
 
     this.settings.knowledgeBase.useCustomRulesFile = true;
     this.settings.knowledgeBase.rulesFilePath = DEFAULT_KNOWLEDGE_BASE_RULES_FILE;
@@ -436,6 +439,11 @@ export default class CodexForObsidianPlugin extends Plugin {
 
   private handleOpenCodeNotification(notification: any): void {
     this.view?.handleOpenCodeNotification(notification);
+  }
+
+  async ensureSkillsLoaded(): Promise<void> {
+    // Skills are loaded as part of ensureOpenCodeConnected
+    if (!this.lastStatus) await this.ensureOpenCodeConnected();
   }
 
   private async flushSettingsSave(): Promise<void> {

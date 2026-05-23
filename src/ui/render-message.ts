@@ -35,7 +35,7 @@ export function renderRichText(app: App, component: Component, container: HTMLEl
     }
 
     if (!line.trim()) {
-      container.createDiv({ cls: "codex-message-spacer" });
+      container.createDiv({ cls: "xy-message-spacer" });
       index += 1;
       continue;
     }
@@ -48,31 +48,31 @@ export function renderRichText(app: App, component: Component, container: HTMLEl
 function renderLine(app: App, component: Component, container: HTMLElement, line: string): void {
   const trimmed = line.trim();
   if (/^>\s+/.test(trimmed)) {
-    const callout = container.createDiv({ cls: "codex-message-callout" });
+    const callout = container.createDiv({ cls: "xy-message-callout" });
     renderInline(app, component, callout, trimmed.replace(/^>\s+/, ""));
     return;
   }
 
   if (trimmed.startsWith("#")) {
     const level = Math.min(4, trimmed.match(/^#+/)?.[0].length ?? 2);
-    const heading = container.createEl(`h${level}` as keyof HTMLElementTagNameMap, { cls: "codex-message-heading" });
+    const heading = container.createEl(`h${level}` as keyof HTMLElementTagNameMap, { cls: "xy-message-heading" });
     heading.setText(trimmed.replace(/^#+\s*/, ""));
     return;
   }
 
   if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
-    const row = container.createDiv({ cls: "codex-message-list-row" });
+    const row = container.createDiv({ cls: "xy-message-list-row" });
     const task = trimmed.match(/^[-*]\s+\[([ xX])]\s+(.*)$/);
     if (task) {
-      const box = row.createSpan({ cls: `codex-message-checkbox ${task[1].trim() ? "is-checked" : ""}` });
+      const box = row.createSpan({ cls: `xy-message-checkbox ${task[1].trim() ? "is-checked" : ""}` });
       if (task[1].trim()) box.setText("✓");
       renderInline(app, component, row.createSpan(), task[2]);
     } else if (/^\d+\.\s+/.test(trimmed)) {
       const number = trimmed.match(/^(\d+)\.\s+/)?.[1] ?? "1";
-      row.createSpan({ cls: "codex-message-number", text: `${number}.` });
+      row.createSpan({ cls: "xy-message-number", text: `${number}.` });
       renderInline(app, component, row.createSpan(), trimmed.replace(/^\d+\.\s+/, ""));
     } else {
-      row.createSpan({ cls: "codex-message-bullet", text: "•" });
+      row.createSpan({ cls: "xy-message-bullet", text: "•" });
       renderInline(app, component, row.createSpan(), trimmed.replace(/^[-*]\s+/, ""));
     }
     return;
@@ -81,7 +81,7 @@ function renderLine(app: App, component: Component, container: HTMLElement, line
   const imageMatch = trimmed.match(/!\[\[([^\]]+)\]\]|!\[[^\]]*]\(([^)]+)\)/);
   if (imageMatch) {
     const path = imageMatch[1] || imageMatch[2];
-    const wrapper = container.createDiv({ cls: "codex-embedded-image" });
+    const wrapper = container.createDiv({ cls: "xy-embedded-image" });
     const img = wrapper.createEl("img");
     img.src = resolveImageSrc(app, path);
     img.onclick = () => openImageOverlay(img.src);
@@ -141,7 +141,7 @@ function renderVaultNoteLink(app: App, component: Component, container: HTMLElem
   if (!resolved && !isHiddenVaultMarkdownPath(segment.targetPath)) return false;
   const targetPath = resolved?.targetPath ?? normalizePath(segment.targetPath);
   const link = container.createEl("a", {
-    cls: "codex-message-note-link",
+    cls: "xy-message-note-link",
     text: segment.text,
     attr: {
       href: "#",
@@ -214,9 +214,9 @@ function normalizeFsPath(value: string): string {
 }
 
 function renderCodeBlock(container: HTMLElement, code: string, language: string): void {
-  const wrapper = container.createDiv({ cls: "codex-code-wrapper" });
-  if (language) wrapper.createSpan({ cls: "codex-code-lang", text: language });
-  const button = wrapper.createEl("button", { cls: "codex-code-copy", attr: { type: "button" } });
+  const wrapper = container.createDiv({ cls: "xy-code-wrapper" });
+  if (language) wrapper.createSpan({ cls: "xy-code-lang", text: language });
+  const button = wrapper.createEl("button", { cls: "xy-code-copy", attr: { type: "button" } });
   setIcon(button, "copy");
   button.onclick = async () => {
     await navigator.clipboard.writeText(code);
@@ -231,7 +231,7 @@ function renderCodeBlock(container: HTMLElement, code: string, language: string)
 }
 
 function renderTable(container: HTMLElement, lines: string[]): void {
-  const table = container.createEl("table", { cls: "codex-message-table" });
+  const table = container.createEl("table", { cls: "xy-message-table" });
   const headerCells = splitTableRow(lines[0]);
   const thead = table.createEl("thead").createEl("tr");
   for (const cell of headerCells) thead.createEl("th", { text: cell });
@@ -273,7 +273,7 @@ function splitReadableParagraphs(line: string): string[] {
 }
 
 export function openImageOverlay(src: string): void {
-  const overlay = document.body.createDiv({ cls: "codex-image-overlay" });
+  const overlay = document.body.createDiv({ cls: "xy-image-overlay" });
   const img = overlay.createEl("img");
   img.src = src;
   overlay.onclick = () => overlay.remove();

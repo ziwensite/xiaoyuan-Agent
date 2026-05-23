@@ -1,15 +1,15 @@
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { ItemView, Notice, WorkspaceLeaf, normalizePath } from "obsidian";
-import type CodexForObsidianPlugin from "../main";
+import type XiaoyuanPlugin from "../main";
 import { isReviewHtmlPath } from "./schedule";
 
-export const VIEW_TYPE_REVIEW_PREVIEW = "codex-review-preview";
+export const VIEW_TYPE_REVIEW_PREVIEW = "xy-review-preview";
 
 export class ReviewPreviewView extends ItemView {
   private htmlPath = "";
 
-  constructor(leaf: WorkspaceLeaf, private readonly plugin: CodexForObsidianPlugin) {
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: XiaoyuanPlugin) {
     super(leaf);
   }
 
@@ -42,15 +42,15 @@ export class ReviewPreviewView extends ItemView {
   private async render(): Promise<void> {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("codex-review-preview");
+    contentEl.addClass("xy-review-preview");
     if (!this.htmlPath) {
-      contentEl.createDiv({ cls: "codex-resource-empty", text: "还没有选择复盘 HTML。" });
+      contentEl.createDiv({ cls: "xy-resource-empty", text: "还没有选择复盘 HTML。" });
       return;
     }
-    const title = contentEl.createDiv({ cls: "codex-review-preview-title" });
+    const title = contentEl.createDiv({ cls: "xy-review-preview-title" });
     title.createSpan({ text: this.htmlPath });
     const frame = contentEl.createEl("iframe", {
-      cls: "codex-review-preview-frame",
+      cls: "xy-review-preview-frame",
       attr: {
         title: this.htmlPath,
         sandbox: "allow-same-origin"
@@ -60,7 +60,7 @@ export class ReviewPreviewView extends ItemView {
     const html = await fsp.readFile(absolute, "utf8").catch(() => "");
     if (!html) {
       frame.remove();
-      contentEl.createDiv({ cls: "codex-resource-error", text: "HTML 文件不存在或无法读取。" });
+      contentEl.createDiv({ cls: "xy-resource-error", text: "HTML 文件不存在或无法读取。" });
       return;
     }
     frame.srcdoc = html;

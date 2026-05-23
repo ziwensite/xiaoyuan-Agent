@@ -1,6 +1,5 @@
-import type { TurnOptions } from "../core/codex-service";
 import type { WorkspaceResourceToggles } from "../settings/settings";
-import type { ServiceTierChoice } from "../types/app-server";
+import type { ServiceTierChoice, TurnOptions } from "../types/app-server";
 import { DEFAULT_EDITOR_ACTION_MODEL } from "./types";
 
 const EMPTY_RESOURCES: WorkspaceResourceToggles = { plugins: {}, mcpServers: {}, skills: {} };
@@ -35,7 +34,7 @@ export function buildEditorActionTurnOptions(input: { model: string; serviceTier
     mcpEnabled: false,
     persistExtendedHistory: false,
     requestTimeoutMs,
-    workspaceResources: input.workspaceResources ?? EMPTY_RESOURCES
+    workspaceResources: (input.workspaceResources ?? EMPTY_RESOURCES) as unknown as Record<string, Record<string, boolean>>
   };
 }
 

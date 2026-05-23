@@ -1,7 +1,7 @@
 import {
   DEFAULT_REVIEW_OUTPUT_DIR,
   type ChatMessage,
-  type CodexForObsidianSettings,
+  type XiaoyuanSettings,
   type ReviewReportKind,
   type StoredSession
 } from "../settings/settings";
@@ -72,7 +72,7 @@ export interface KnowledgeBaseReviewEvidence {
 
 export type ReviewEvidence = AgentChatReviewEvidence | KnowledgeBaseReviewEvidence;
 
-export function collectAgentChatReviewEvidence(settings: CodexForObsidianSettings, range: ReviewRange): AgentChatReviewEvidence {
+export function collectAgentChatReviewEvidence(settings: XiaoyuanSettings, range: ReviewRange): AgentChatReviewEvidence {
   const sessions = settings.sessions.filter((session) => !isKnowledgeBaseSession(session, settings.knowledgeBase.sessionId));
   const activeSessions = sessions.filter((session) => messagesInRange(session.messages, range).length > 0);
   const messages = activeSessions.flatMap((session) => messagesInRange(session.messages, range));
@@ -97,7 +97,7 @@ export function collectAgentChatReviewEvidence(settings: CodexForObsidianSetting
 }
 
 export function collectKnowledgeBaseReviewEvidence(
-  settings: CodexForObsidianSettings,
+  settings: XiaoyuanSettings,
   range: ReviewRange,
   extras: { dashboard?: KnowledgeBaseDashboardEvidence; maintenanceReports?: KnowledgeBaseMaintenanceReportEvidence[] } = {}
 ): KnowledgeBaseReviewEvidence {

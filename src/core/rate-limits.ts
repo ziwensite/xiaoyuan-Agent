@@ -22,10 +22,7 @@ export interface RateLimitUsageView {
 export function normalizeRateLimitResponse(value: any): RateLimitResponse {
   const byLimitId = normalizeRateLimitsByLimitId(value?.rateLimitsByLimitId);
   const fallback = normalizeRateLimitSnapshot(value?.rateLimits) ?? normalizeRateLimitSnapshotLike(value);
-  const codexEntries = Object.entries(byLimitId ?? {})
-    .filter(([key]) => key.startsWith("codex"))
-    .map(([, item]) => item);
-  const candidates = [byLimitId?.codex, ...codexEntries, fallback, ...Object.values(byLimitId ?? {})].filter(
+  const candidates = [fallback, ...Object.values(byLimitId ?? {})].filter(
     (item): item is RateLimitSnapshot => Boolean(item)
   );
   const preferred = candidates.find(hasUsableRateLimitSnapshot) ?? candidates[0] ?? null;
@@ -67,7 +64,7 @@ export function formatRateLimitUsage(rateLimits: RateLimitSnapshot | null): Rate
     .map((item) => `${item.label} ${item.remainingPercent}% · ${item.resetLabel}`);
   return {
     summary,
-    title: parts.length ? `剩余额度：${parts.join(" / ")}` : "Codex 用量暂不可用",
+    title: parts.length ? `剩余额度：${parts.join(" / ")}` : "用量暂不可用",
     primary,
     secondary
   };

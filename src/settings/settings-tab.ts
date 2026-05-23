@@ -1,5 +1,5 @@
 import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, setIcon, TFile, type FuzzyMatch } from "obsidian";
-import type CodexForObsidianPlugin from "../main";
+import type XiaoyuanPlugin from "../main";
 import { OpenCodeBackend } from "../core/opencode-backend";
 import { detectOpenCodeCommand, type Provider } from "../core/opencode-models";
 import type { AgentModelInfo, AgentProfileInfo } from "../agent/types";
@@ -45,8 +45,9 @@ import {
   type SettingsLanguage,
   type SettingsTab
 } from "./settings";
-import type { CodexPluginInfo, CodexSkill, CodexStatusSnapshot, McpServerStatus, PermissionMode, ReasoningEffort, ServiceTierChoice, UiMode, WorkspaceResourceSnapshot } from "../types/app-server";
-import { AGENTS_RULES_FILE, CODEX_MEMORY_LITE_URL, DEFAULT_KNOWLEDGE_BASE_RULES_FILE } from "../knowledge-base/constants";
+import type { PluginInfo, SkillSpec, McpServerStatus, PermissionMode, RateLimitSnapshot, ReasoningEffort, ServiceTierChoice, UiMode, WorkspaceResourceSnapshot } from "../types/app-server";
+import type { OpenCodeStatusSnapshot } from "../main";
+import { AGENTS_RULES_FILE, MEMORY_LITE_URL, DEFAULT_KNOWLEDGE_BASE_RULES_FILE } from "../knowledge-base/constants";
 import { repairKnowledgeBaseRulesFile } from "../knowledge-base/rules-repair";
 import { confirmModal } from "../ui/modals";
 import { SETTINGS_LANGUAGE_OPTIONS, settingsCopy, type SettingsCopy } from "./i18n";
@@ -68,7 +69,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private openCodeAgentsError = "";
   private collapsedProviders: Record<string, boolean> = {};
 
-  constructor(private readonly plugin: CodexForObsidianPlugin) {
+  constructor(private readonly plugin: XiaoyuanPlugin) {
     super(plugin.app, plugin);
     this.resourceSnapshot = snapshotFromWorkspaceResourceCache(this.plugin.settings.workspaceResourceCache);
     this.resourceLoaded = loadedTabsFromWorkspaceResourceCache(this.plugin.settings.workspaceResourceCache);
@@ -107,26 +108,26 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       }), "bot");
 
     const status = this.plugin.lastStatus;
-    const statusBox = containerEl.createDiv({ cls: "codex-settings-status" });
+    const statusBox = containerEl.createDiv({ cls: "xy-settings-status" });
     
     // 根据模式显示不同的连接状态
     if (mode === "opencode") {
       // OpenCode 模式
-      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
       this.addStatusRow(statusBox, "box", copy.status.currentModel, this.plugin.settings.opencode.modelId || this.plugin.settings.defaultModel || copy.common.unknown);
     } else if (mode === "custom-api") {
       // API 模式
       const activeProvider = getActiveApiProvider(this.plugin.settings);
       const apiConnected = activeProvider && activeProvider.baseUrl && activeProvider.apiKey;
-      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, apiConnected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, apiConnected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
       if (activeProvider) {
         this.addStatusRow(statusBox, "box", copy.status.currentModel, activeProvider.model || copy.common.unknown);
       }
     } else {
       // 混合模式
-      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
       const activeProvider = getActiveApiProvider(this.plugin.settings);
@@ -169,7 +170,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     this.renderGeneralSettings(containerEl, status);
   }
 
-  private renderGeneralSettings(containerEl: HTMLElement, status: CodexStatusSnapshot | null): void {
+  private renderGeneralSettings(containerEl: HTMLElement, status: OpenCodeStatusSnapshot | null): void {
     const copy = this.copy;
     this.decorateSetting(new Setting(containerEl).setName(copy.general.settingsLanguage).setDesc(copy.general.settingsLanguageDesc).addDropdown((dropdown) => {
       for (const language of SETTINGS_LANGUAGE_OPTIONS) dropdown.addOption(language, copy.general.languageOptions[language]);
@@ -216,7 +217,8 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       .setDesc(copy.general.defaultModelDesc)
       .addDropdown((dropdown) => {
         dropdown.addOption("", copy.general.auto);
-        for (const model of ensureModelChoices(status?.models ?? [], this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel)) {
+        const modelChoices = (status?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName }));
+        for (const model of ensureModelChoices(modelChoices, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel)) {
           dropdown.addOption(model.model, model.displayName || model.model);
         }
         dropdown.setValue(this.plugin.settings.defaultModel);
@@ -292,33 +294,33 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderKnowledgeBaseSettings(container: HTMLElement): void {
     const copy = this.copy;
     const settings = this.plugin.settings.knowledgeBase;
-    const wrapper = container.createDiv({ cls: "codex-api-provider-manager codex-knowledge-settings" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
+    const wrapper = container.createDiv({ cls: "xy-api-provider-manager xy-knowledge-settings" });
+    const header = wrapper.createDiv({ cls: "xy-resource-manager-header" });
+    const title = header.createDiv({ cls: "xy-resource-manager-title" });
+    const icon = title.createSpan({ cls: "xy-setting-icon" });
     setIcon(icon, "library");
     title.createSpan({ text: copy.knowledge.title });
 
     wrapper.createDiv({
-      cls: "codex-resource-warning",
+      cls: "xy-resource-warning",
       text: copy.knowledge.safety
     });
 
-    const summary = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    summary.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.statusHeading });
-    summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.recentStatus(knowledgeStatusLabel(settings.lastRunStatus, copy), settings.lastRunAt ? new Date(settings.lastRunAt).toLocaleString() : "") });
-    summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.initialization(knowledgeInitStatusLabel(settings.initialization.status, copy), settings.initialization.rulesFilePath) });
-    summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.guide(settings.useCustomRulesFile ? settings.rulesFilePath : AGENTS_RULES_FILE, settings.useCustomRulesFile) });
-    if (settings.lastReportPath) summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.recentReport(settings.lastReportPath) });
-    if (settings.lastError) summary.createDiv({ cls: "codex-resource-error", text: settings.lastError });
+    const summary = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    summary.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.statusHeading });
+    summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.recentStatus(knowledgeStatusLabel(settings.lastRunStatus, copy), settings.lastRunAt ? new Date(settings.lastRunAt).toLocaleString() : "") });
+    summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.initialization(knowledgeInitStatusLabel(settings.initialization.status, copy), settings.initialization.rulesFilePath) });
+    summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.guide(settings.useCustomRulesFile ? settings.rulesFilePath : AGENTS_RULES_FILE, settings.useCustomRulesFile) });
+    if (settings.lastReportPath) summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.recentReport(settings.lastReportPath) });
+    if (settings.lastError) summary.createDiv({ cls: "xy-resource-error", text: settings.lastError });
 
-    const actions = summary.createDiv({ cls: "codex-api-provider-actions" });
-    const openChannel = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.openChannel, attr: { type: "button" } });
+    const actions = summary.createDiv({ cls: "xy-api-provider-actions" });
+    const openChannel = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.openChannel, attr: { type: "button" } });
     openChannel.onclick = async () => {
       await this.plugin.activateKnowledgeBaseChannel();
       this.display();
     };
-    const initChannel = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.initChannel, attr: { type: "button" } });
+    const initChannel = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.initChannel, attr: { type: "button" } });
     initChannel.onclick = async () => {
       await this.plugin.activateKnowledgeBaseChannel();
       this.plugin.getXiaoyuanView()?.fillKnowledgeBaseCommand("/init ");
@@ -368,17 +370,17 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     ), "history");
 
     wrapper.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.channelNote
     });
   }
 
   private addKnowledgeBaseCommandGuide(container: HTMLElement): void {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-api-provider-row codex-kb-command-guide" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.commandHeading });
+    const section = container.createDiv({ cls: "xy-api-provider-row xy-kb-command-guide" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.commandHeading });
     for (const item of copy.knowledge.commandGuide) {
-      const row = section.createDiv({ cls: "codex-kb-command-row" });
+      const row = section.createDiv({ cls: "xy-kb-command-row" });
       row.createEl("code", { text: item.command });
       row.createSpan({ text: item.description });
     }
@@ -386,9 +388,9 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private addKnowledgeBaseStoragePanel(container: HTMLElement): void {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-api-provider-row codex-kb-storage-panel" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.storageHeading });
-    const statsEl = section.createDiv({ cls: "codex-resource-note", text: copy.knowledge.storageLoading });
+    const section = container.createDiv({ cls: "xy-api-provider-row xy-kb-storage-panel" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.storageHeading });
+    const statsEl = section.createDiv({ cls: "xy-resource-note", text: copy.knowledge.storageLoading });
     void this.plugin.getKnowledgeBaseStorageStats()
       .then((stats) => {
         statsEl.setText(copy.knowledge.storageStats(
@@ -402,22 +404,22 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       .catch((error) => {
         statsEl.setText(copy.common.readFailed(error instanceof Error ? error.message : String(error)));
       });
-    const actions = section.createDiv({ cls: "codex-api-provider-actions" });
-    const rebuild = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.rebuildHistory, attr: { type: "button" } });
+    const actions = section.createDiv({ cls: "xy-api-provider-actions" });
+    const rebuild = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.rebuildHistory, attr: { type: "button" } });
     rebuild.onclick = async () => {
       rebuild.disabled = true;
       await this.plugin.rebuildKnowledgeBaseHistoryIndex();
       new Notice(copy.knowledge.historyRebuilt);
       this.display();
     };
-    const exportButton = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.exportHistory, attr: { type: "button" } });
+    const exportButton = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.exportHistory, attr: { type: "button" } });
     exportButton.onclick = async () => {
       exportButton.disabled = true;
       const exported = await this.plugin.exportKnowledgeBaseHistory();
       new Notice(copy.knowledge.historyExported(exported));
       this.display();
     };
-    const compact = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.compactHistory, attr: { type: "button" } });
+    const compact = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.compactHistory, attr: { type: "button" } });
     compact.onclick = async () => {
       const accepted = await confirmModal(this.app, copy.knowledge.compactHistory, "只压缩旧日期的过程记录，不删除用户与助手正文。", "压缩", "取消");
       if (!accepted) return;
@@ -431,21 +433,21 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderReviewSettings(container: HTMLElement): void {
     const copy = this.copy;
     const settings = this.plugin.settings.review;
-    const wrapper = container.createDiv({ cls: "codex-api-provider-manager codex-review-settings" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
+    const wrapper = container.createDiv({ cls: "xy-api-provider-manager xy-review-settings" });
+    const header = wrapper.createDiv({ cls: "xy-resource-manager-header" });
+    const title = header.createDiv({ cls: "xy-resource-manager-title" });
+    const icon = title.createSpan({ cls: "xy-setting-icon" });
     setIcon(icon, "bar-chart-3");
     title.createSpan({ text: copy.review.title });
 
-    const summary = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    summary.createDiv({ cls: "codex-editor-actions-heading", text: copy.review.generateHeading });
-    const actions = summary.createDiv({ cls: "codex-api-provider-actions" });
+    const summary = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    summary.createDiv({ cls: "xy-editor-actions-heading", text: copy.review.generateHeading });
+    const actions = summary.createDiv({ cls: "xy-api-provider-actions" });
     this.addReviewAction(actions, copy.review.generateAgent, "agent-chat");
     this.addReviewAction(actions, copy.review.generateKnowledge, "knowledge-base");
 
-    const paths = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    paths.createDiv({ cls: "codex-editor-actions-heading", text: copy.review.pathsHeading });
+    const paths = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    paths.createDiv({ cls: "xy-editor-actions-heading", text: copy.review.pathsHeading });
     this.addProviderText(paths, copy.review.outputDir, settings.outputDir, DEFAULT_SETTINGS.review.outputDir, async (value) => {
       settings.outputDir = normalizeReviewOutputDir(value, DEFAULT_SETTINGS.review.outputDir);
       await this.plugin.saveSettings();
@@ -456,20 +458,20 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     this.addReviewPath(paths, copy.review.agentMarkdown, settings.reports.agentChat.lastMarkdownPath);
     this.addReviewPath(paths, copy.review.agentHtml, settings.reports.agentChat.lastHtmlPath);
 
-    const reviewOptions = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    reviewOptions.createDiv({ cls: "codex-editor-actions-heading", text: copy.review.settingsHeading });
+    const reviewOptions = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    reviewOptions.createDiv({ cls: "xy-editor-actions-heading", text: copy.review.settingsHeading });
     this.addReviewRangeMode(reviewOptions);
     this.addReviewOpenAfterRun(reviewOptions);
   }
 
   private addReviewPath(container: HTMLElement, label: string, value: string): void {
     if (!value) return;
-    container.createDiv({ cls: "codex-resource-note", text: `${label}：${value}` });
+    container.createDiv({ cls: "xy-resource-note", text: `${label}：${value}` });
   }
 
   private addReviewAction(container: HTMLElement, label: string, kind: ReviewReportKind): void {
     const copy = this.copy;
-    const button = container.createEl("button", { cls: "codex-resource-tab", text: label, attr: { type: "button" } });
+    const button = container.createEl("button", { cls: "xy-resource-tab", text: label, attr: { type: "button" } });
     button.onclick = async () => {
       const reportLabel = copy.review.reportLabels[kind];
       const accepted = await confirmModal(
@@ -516,12 +518,12 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private addStatusActions(container: HTMLElement): void {
     const copy = this.copy;
-    const actions = container.createDiv({ cls: "codex-settings-status-actions" });
+    const actions = container.createDiv({ cls: "xy-settings-status-actions" });
     const refresh = actions.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       attr: { type: "button", title: copy.status.refreshTitle }
     });
-    const icon = refresh.createSpan({ cls: "codex-resource-refresh-icon" });
+    const icon = refresh.createSpan({ cls: "xy-resource-refresh-icon" });
     setIcon(icon, "refresh-cw");
     const label = refresh.createSpan({ text: copy.status.refreshLogin });
     refresh.onclick = async () => {
@@ -538,24 +540,24 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     if (!errors.length) return;
     const copy = this.copy;
     for (const error of errors.slice(0, 3)) {
-      const card = container.createDiv({ cls: "codex-settings-status-error" });
-      const title = card.createDiv({ cls: "codex-settings-status-error-title" });
-      const icon = title.createSpan({ cls: "codex-settings-status-icon" });
+      const card = container.createDiv({ cls: "xy-settings-status-error" });
+      const title = card.createDiv({ cls: "xy-settings-status-error-title" });
+      const icon = title.createSpan({ cls: "xy-settings-status-icon" });
       setIcon(icon, "triangle-alert");
       title.createSpan({ text: copy.status.diagnostics });
-      card.createEl("pre", { cls: "codex-settings-status-error-body", text: error });
+      card.createEl("pre", { cls: "xy-settings-status-error-body", text: error });
     }
   }
 
   private renderTopTabs(container: HTMLElement): void {
     const copy = this.copy;
-    const tabs = container.createDiv({ cls: "codex-settings-tabs" });
+    const tabs = container.createDiv({ cls: "xy-settings-tabs" });
     for (const tab of SETTINGS_TABS) {
       const button = tabs.createEl("button", {
-        cls: `codex-settings-tab ${this.plugin.settings.settingsTab === tab.id ? "is-active" : ""}`,
+        cls: `xy-settings-tab ${this.plugin.settings.settingsTab === tab.id ? "is-active" : ""}`,
         attr: { type: "button" }
       });
-      const icon = button.createSpan({ cls: "codex-settings-tab-icon" });
+      const icon = button.createSpan({ cls: "xy-settings-tab-icon" });
       setIcon(icon, tab.icon);
       button.createSpan({ text: copy.tabs[tab.id] });
       button.onclick = async () => {
@@ -568,17 +570,17 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private renderApiProviderManager(container: HTMLElement): void {
     const copy = this.copy;
-    const wrapper = container.createDiv({ cls: "codex-api-provider-manager" });
+    const wrapper = container.createDiv({ cls: "xy-api-provider-manager" });
 
     const opencode = this.plugin.settings.opencode;
-    const openCodeSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
-    const openCodeHeader = openCodeSection.createDiv({ cls: "codex-resource-manager-header" });
-    const openCodeTitle = openCodeHeader.createDiv({ cls: "codex-resource-manager-title" });
-    const openCodeIcon = openCodeTitle.createSpan({ cls: "codex-setting-icon" });
+    const openCodeSection = wrapper.createDiv({ cls: "xy-editor-actions-section" });
+    const openCodeHeader = openCodeSection.createDiv({ cls: "xy-resource-manager-header" });
+    const openCodeTitle = openCodeHeader.createDiv({ cls: "xy-resource-manager-title" });
+    const openCodeIcon = openCodeTitle.createSpan({ cls: "xy-setting-icon" });
     setIcon(openCodeIcon, "terminal-square");
     openCodeTitle.createSpan({ text: copy.providers.opencodeMode });
     
-    openCodeSection.createDiv({ cls: "codex-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
+    openCodeSection.createDiv({ cls: "xy-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
     this.addProviderText(openCodeSection, copy.knowledge.opencodePath, opencode.cliPath, "/opt/homebrew/bin/opencode", async (value) => {
       opencode.cliPath = value.trim();
       await this.plugin.saveSettings();
@@ -614,35 +616,34 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     });
     this.addOpenCodeAgentPicker(openCodeSection);
     openCodeSection.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.modelCapabilities(opencode.textEnabled, opencode.imageEnabled, opencode.pdfEnabled)
     });
-    if (opencode.lastError) openCodeSection.createDiv({ cls: "codex-resource-error", text: opencode.lastError });
-    if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeModelsError });
-    if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeAgentsError });
-    const openCodeActions = openCodeSection.createDiv({ cls: "codex-api-provider-actions" });
-    const testOpenCode = openCodeActions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
+    if (opencode.lastError) openCodeSection.createDiv({ cls: "xy-resource-error", text: opencode.lastError });
+    if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "xy-resource-error", text: this.openCodeModelsError });
+    if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "xy-resource-error", text: this.openCodeAgentsError });
+    const openCodeActions = openCodeSection.createDiv({ cls: "xy-api-provider-actions" });
+    const testOpenCode = openCodeActions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
     testOpenCode.onclick = async () => {
       await this.refreshOpenCodeRuntimeOptions();
       this.display();
     };
 
-    const customApiSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
-    const customApiHeader = customApiSection.createDiv({ cls: "codex-resource-manager-header" });
-    const customApiTitle = customApiHeader.createDiv({ cls: "codex-resource-manager-title" });
-    const customApiIcon = customApiTitle.createSpan({ cls: "codex-setting-icon" });
+    const customApiSection = wrapper.createDiv({ cls: "xy-editor-actions-section" });
+    const customApiHeader = customApiSection.createDiv({ cls: "xy-resource-manager-header" });
+    const customApiTitle = customApiHeader.createDiv({ cls: "xy-resource-manager-title" });
+    const customApiIcon = customApiTitle.createSpan({ cls: "xy-setting-icon" });
     setIcon(customApiIcon, "key-round");
     customApiTitle.createSpan({ text: copy.providers.customApiMode });
 
     const add = customApiHeader.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       text: copy.providers.add,
       attr: { type: "button", title: copy.providers.addTitle }
     });
     add.onclick = async () => {
       const defaultProviderModel = this.plugin.settings.defaultModel
-        || this.plugin.lastStatus?.models.find((model) => model.isDefault)?.model
-        || this.plugin.lastStatus?.models[0]?.model
+        || this.plugin.lastStatus?.models[0]?.modelId
         || "gpt-5.4";
       const provider: ApiProviderConfig = {
         id: newId("provider").replace(/[^A-Za-z0-9_-]/g, "_"),
@@ -659,26 +660,26 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     };
 
     customApiSection.createDiv({
-      cls: "codex-resource-warning",
+      cls: "xy-resource-warning",
       text: copy.providers.warningKey
     });
     customApiSection.createDiv({
-      cls: "codex-resource-warning",
+      cls: "xy-resource-warning",
       text: copy.providers.warningApi
     });
 
-    const modeRow = customApiSection.createDiv({ cls: "codex-api-provider-mode" });
+    const modeRow = customApiSection.createDiv({ cls: "xy-api-provider-mode" });
     modeRow.createDiv({
-      cls: "codex-resource-summary",
+      cls: "xy-resource-summary",
       text: copy.common.current(providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage))
     });
 
     if (!this.plugin.settings.apiProviders.length) {
-      customApiSection.createDiv({ cls: "codex-resource-empty", text: copy.providers.empty });
+      customApiSection.createDiv({ cls: "xy-resource-empty", text: copy.providers.empty });
       return;
     }
 
-    const body = customApiSection.createDiv({ cls: "codex-api-provider-list" });
+    const body = customApiSection.createDiv({ cls: "xy-api-provider-list" });
     for (const provider of this.plugin.settings.apiProviders) {
       this.renderApiProviderRow(body, provider);
     }
@@ -761,17 +762,17 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private renderEditorActionList(container: HTMLElement, actions: EditorAiActionConfig[]): void {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.writing.actionsHeading });
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.writing.actionsHeading });
     for (const action of actions) {
-      const row = section.createDiv({ cls: "codex-api-provider-row codex-editor-action-row" });
-      const head = row.createDiv({ cls: "codex-api-provider-head" });
-      const title = head.createDiv({ cls: "codex-api-provider-title" });
-      const icon = title.createSpan({ cls: "codex-resource-row-icon" });
+      const row = section.createDiv({ cls: "xy-api-provider-row xy-editor-action-row" });
+      const head = row.createDiv({ cls: "xy-api-provider-head" });
+      const title = head.createDiv({ cls: "xy-api-provider-title" });
+      const icon = title.createSpan({ cls: "xy-resource-row-icon" });
       setIcon(icon, editorActionIcon(action.id));
       title.createSpan({ text: action.label || action.id });
-      title.createSpan({ cls: "codex-resource-row-meta", text: action.enabled ? copy.writing.enabledMeta : copy.writing.disabledMeta });
-      const toggleWrap = head.createDiv({ cls: "codex-api-provider-actions" });
+      title.createSpan({ cls: "xy-resource-row-meta", text: action.enabled ? copy.writing.enabledMeta : copy.writing.disabledMeta });
+      const toggleWrap = head.createDiv({ cls: "xy-api-provider-actions" });
       new Setting(toggleWrap).addToggle((toggle) =>
         toggle.setValue(action.enabled).onChange(async (value) => {
           action.enabled = value;
@@ -794,18 +795,19 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderEditorActionModeConfigs(container: HTMLElement): void {
     const copy = this.copy;
     const settings = this.plugin.settings.editorActions;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.writing.qualityModesHeading });
-    const modelChoices = ensureModelChoices(this.plugin.lastStatus?.models ?? [], "gpt-5.4-mini", "gpt-5.4", "gpt-5.5", DEFAULT_SETTINGS.defaultModel);
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.writing.qualityModesHeading });
+    const rawModels = (this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName }));
+    const modelChoices = ensureModelChoices(rawModels, "gpt-5.4-mini", "gpt-5.4", "gpt-5.5", DEFAULT_SETTINGS.defaultModel);
     for (const mode of EDITOR_ACTION_QUALITY_MODES) {
       const config = settings.modeConfigs[mode.id];
-      const row = section.createDiv({ cls: "codex-api-provider-row codex-editor-mode-row" });
-      const head = row.createDiv({ cls: "codex-api-provider-head" });
-      const title = head.createDiv({ cls: "codex-api-provider-title" });
-      const icon = title.createSpan({ cls: "codex-resource-row-icon" });
+      const row = section.createDiv({ cls: "xy-api-provider-row xy-editor-mode-row" });
+      const head = row.createDiv({ cls: "xy-api-provider-head" });
+      const title = head.createDiv({ cls: "xy-api-provider-title" });
+      const icon = title.createSpan({ cls: "xy-resource-row-icon" });
       setIcon(icon, mode.icon);
       title.createSpan({ text: copy.writing.qualityModes[mode.id].label });
-      title.createSpan({ cls: "codex-resource-row-meta", text: copy.writing.qualityModes[mode.id].desc });
+      title.createSpan({ cls: "xy-resource-row-meta", text: copy.writing.qualityModes[mode.id].desc });
 
       this.decorateSetting(new Setting(row).setName(copy.writing.model).addDropdown((dropdown) => {
         for (const model of ensureModelChoices(modelChoices, config.model)) dropdown.addOption(model.model, model.displayName || model.model);
@@ -830,11 +832,11 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private renderEditorStyleList(container: HTMLElement, styles: EditorAiStyleConfig[]): void {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    const header = section.createDiv({ cls: "codex-resource-manager-header" });
-    header.createDiv({ cls: "codex-editor-actions-heading", text: copy.writing.stylesHeading });
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    const header = section.createDiv({ cls: "xy-resource-manager-header" });
+    header.createDiv({ cls: "xy-editor-actions-heading", text: copy.writing.stylesHeading });
     const add = header.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       text: copy.writing.addStyle,
       attr: { type: "button" }
     });
@@ -847,16 +849,16 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     };
 
     for (const style of styles) {
-      const row = section.createDiv({ cls: "codex-api-provider-row codex-editor-style-row" });
-      const head = row.createDiv({ cls: "codex-api-provider-head" });
-      const title = head.createDiv({ cls: "codex-api-provider-title" });
-      const icon = title.createSpan({ cls: "codex-resource-row-icon" });
+      const row = section.createDiv({ cls: "xy-api-provider-row xy-editor-style-row" });
+      const head = row.createDiv({ cls: "xy-api-provider-head" });
+      const title = head.createDiv({ cls: "xy-api-provider-title" });
+      const icon = title.createSpan({ cls: "xy-resource-row-icon" });
       setIcon(icon, "palette");
       title.createSpan({ text: style.label || style.id });
-      title.createSpan({ cls: "codex-resource-row-meta", text: style.id });
-      const actions = head.createDiv({ cls: "codex-api-provider-actions" });
+      title.createSpan({ cls: "xy-resource-row-meta", text: style.id });
+      const actions = head.createDiv({ cls: "xy-api-provider-actions" });
       if (!DEFAULT_SETTINGS.editorActions.styles.some((item) => item.id === style.id)) {
-        const remove = actions.createEl("button", { cls: "codex-resource-tab", text: copy.common.delete, attr: { type: "button" } });
+        const remove = actions.createEl("button", { cls: "xy-resource-tab", text: copy.common.delete, attr: { type: "button" } });
         remove.onclick = async () => {
           this.plugin.settings.editorActions.styles = styles.filter((item) => item.id !== style.id);
           if (this.plugin.settings.editorActions.defaultStyleId === style.id) this.plugin.settings.editorActions.defaultStyleId = "clear";
@@ -881,26 +883,26 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const activeProvider = getActiveApiProvider(this.plugin.settings);
     const isCollapsed = this.collapsedProviders[provider.id] !== false;
     const row = container.createDiv({
-      cls: `codex-api-provider-row ${activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? "is-active" : ""}`
+      cls: `xy-api-provider-row ${activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? "is-active" : ""}`
     });
     
-    const head = row.createDiv({ cls: "codex-api-provider-head" });
+    const head = row.createDiv({ cls: "xy-api-provider-head" });
     
-    const toggleBtn = head.createEl("button", { cls: "codex-api-provider-toggle", attr: { type: "button" } });
+    const toggleBtn = head.createEl("button", { cls: "xy-api-provider-toggle", attr: { type: "button" } });
     setIcon(toggleBtn, isCollapsed ? "chevron-right" : "chevron-down");
     toggleBtn.onclick = () => {
       this.collapsedProviders[provider.id] = !isCollapsed;
       this.display();
     };
     
-    const title = head.createDiv({ cls: "codex-api-provider-title" });
+    const title = head.createDiv({ cls: "xy-api-provider-title" });
     title.createSpan({ text: provider.name || copy.providers.unnamed });
-    title.createSpan({ cls: "codex-resource-row-meta", text: providerModelLabel(provider, this.plugin.settings.settingsLanguage) });
+    title.createSpan({ cls: "xy-resource-row-meta", text: providerModelLabel(provider, this.plugin.settings.settingsLanguage) });
     title.prepend(toggleBtn);
 
-    const actions = head.createDiv({ cls: "codex-api-provider-actions" });
+    const actions = head.createDiv({ cls: "xy-api-provider-actions" });
     const enable = actions.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? copy.providers.active : copy.providers.enableReconnect,
       attr: { type: "button" }
     });
@@ -918,7 +920,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     };
 
     const remove = actions.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.common.delete,
       attr: { type: "button" }
     });
@@ -931,7 +933,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       this.display();
     };
 
-    const content = row.createDiv({ cls: "codex-api-provider-content" });
+    const content = row.createDiv({ cls: "xy-api-provider-content" });
     if (isCollapsed) content.style.display = "none";
 
     this.addProviderText(content, copy.providers.name, provider.name, copy.providers.namePlaceholder, async (value) => {
@@ -943,7 +945,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       provider.baseUrl = value.trim();
       await this.plugin.saveSettings();
     });
-    content.createDiv({ cls: "codex-resource-note", text: copy.providers.responseApiRequirement });
+    content.createDiv({ cls: "xy-resource-note", text: copy.providers.responseApiRequirement });
     this.addProviderTextArea(content, copy.providers.models, getApiProviderModels(provider).join("\n"), "gpt-5.4\ngpt-5.5", async (value) => {
       const models = parseModelList(value);
       provider.models = models;
@@ -962,9 +964,9 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     });
 
     const errors = validateApiProvider(provider, this.plugin.settings.settingsLanguage);
-    if (errors.length) content.createDiv({ cls: "codex-resource-error", text: copy.common.missing(errors) });
+    if (errors.length) content.createDiv({ cls: "xy-resource-error", text: copy.common.missing(errors) });
     if (activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api") {
-      content.createDiv({ cls: "codex-resource-note", text: copy.providers.configChanged });
+      content.createDiv({ cls: "xy-resource-note", text: copy.providers.configChanged });
     }
   }
 
@@ -976,10 +978,10 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     onChange: (value: string) => Promise<void>,
     type: "text" | "password" = "text"
   ): void {
-    const field = container.createDiv({ cls: "codex-api-provider-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: label });
+    const field = container.createDiv({ cls: "xy-api-provider-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: label });
     const input = field.createEl("input", {
-      cls: "codex-api-provider-input",
+      cls: "xy-api-provider-input",
       attr: { type, placeholder, value }
     }) as HTMLInputElement;
     input.onchange = () => void onChange(input.value);
@@ -991,14 +993,14 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const currentValue = opencode.providerId && opencode.modelId
       ? openCodeModelChoiceValue({ providerId: opencode.providerId, modelId: opencode.modelId })
       : "";
-    const field = container.createDiv({ cls: "codex-api-provider-field codex-opencode-model-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: copy.opencode.model });
-    const controls = field.createDiv({ cls: "codex-opencode-model-picker" });
+    const field = container.createDiv({ cls: "xy-api-provider-field xy-opencode-model-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: copy.opencode.model });
+    const controls = field.createDiv({ cls: "xy-opencode-model-picker" });
     const values = new Set(this.openCodeModelChoices.map((model) => openCodeModelChoiceValue(model)));
 
     if (this.openCodeModelsLoaded && this.openCodeModelChoices.length) {
       const select = controls.createEl("select", {
-        cls: "codex-api-provider-input codex-opencode-model-select",
+        cls: "xy-api-provider-input xy-opencode-model-select",
         attr: { "aria-label": copy.opencode.chooseModel, title: copy.opencode.chooseModel }
       }) as HTMLSelectElement;
       if (!currentValue) {
@@ -1010,7 +1012,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       // Group models by provider using optgroup
       for (const provider of this.openCodeProviders) {
         // Skip unconfigured providers
-        if (provider.configured === false) continue;
+        if ((provider as any).configured === false) continue;
         
         const providerId = provider.id;
         const providerName = provider.name || providerId;
@@ -1036,13 +1038,13 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       };
     } else {
       controls.createDiv({
-        cls: "codex-resource-note codex-opencode-model-empty",
+        cls: "xy-resource-note xy-opencode-model-empty",
         text: this.openCodeModelsLoading ? copy.opencode.modelLoading : copy.opencode.refreshModelHint
       });
     }
 
     const refresh = controls.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: this.openCodeModelsLoading ? copy.common.loading : copy.opencode.refreshModels,
       attr: { type: "button" }
     });
@@ -1051,7 +1053,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
     const selectedModel = this.openCodeModelChoices.find((model) => model.providerId === opencode.providerId && model.modelId === opencode.modelId);
     field.createDiv({
-      cls: "codex-resource-note codex-opencode-model-note",
+      cls: "xy-resource-note xy-opencode-model-note",
       text: selectedModel
         ? copy.opencode.selectedModel(selectedModel.displayName, openCodeModelCapabilityLabel(selectedModel, this.plugin.settings.settingsLanguage))
         : copy.opencode.modelNote
@@ -1062,14 +1064,14 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const copy = this.copy;
     const opencode = this.plugin.settings.opencode;
     const currentValue = opencode.agent?.trim() || "build";
-    const field = container.createDiv({ cls: "codex-api-provider-field codex-opencode-agent-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: copy.opencode.agent });
-    const controls = field.createDiv({ cls: "codex-opencode-model-picker" });
+    const field = container.createDiv({ cls: "xy-api-provider-field xy-opencode-agent-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: copy.opencode.agent });
+    const controls = field.createDiv({ cls: "xy-opencode-model-picker" });
     const values = new Set(this.openCodeAgentChoices.map((agent) => openCodeAgentChoiceValue(agent)));
 
     if (this.openCodeAgentsLoaded && this.openCodeAgentChoices.length) {
       const select = controls.createEl("select", {
-        cls: "codex-api-provider-input codex-opencode-model-select",
+        cls: "xy-api-provider-input xy-opencode-model-select",
         attr: { "aria-label": copy.opencode.chooseAgent, title: copy.opencode.chooseAgent }
       }) as HTMLSelectElement;
       if (!values.has(currentValue)) {
@@ -1089,7 +1091,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       };
     } else {
       const input = controls.createEl("input", {
-        cls: "codex-api-provider-input codex-opencode-model-select",
+        cls: "xy-api-provider-input xy-opencode-model-select",
         attr: {
           type: "text",
           placeholder: "build",
@@ -1105,7 +1107,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     }
 
     const refresh = controls.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: this.openCodeAgentsLoading ? copy.common.loading : copy.opencode.refreshAgent,
       attr: { type: "button" }
     });
@@ -1114,7 +1116,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
     const selectedAgent = this.openCodeAgentChoices.find((agent) => agent.name === currentValue);
     field.createDiv({
-      cls: "codex-resource-note codex-opencode-model-note",
+      cls: "xy-resource-note xy-opencode-model-note",
       text: selectedAgent
         ? copy.opencode.selectedAgent(selectedAgent.name, openCodeAgentModeLabel(selectedAgent, this.plugin.settings.settingsLanguage), selectedAgent.description ?? "")
         : this.openCodeAgentsLoaded
@@ -1206,27 +1208,27 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const copy = this.copy;
     const settings = this.plugin.settings.knowledgeBase;
     const currentPath = settings.useCustomRulesFile ? settings.rulesFilePath : AGENTS_RULES_FILE;
-    const field = container.createDiv({ cls: "codex-api-provider-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: copy.knowledge.rulesFile });
-    const picker = field.createDiv({ cls: "codex-rules-file-picker" });
+    const field = container.createDiv({ cls: "xy-api-provider-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: copy.knowledge.rulesFile });
+    const picker = field.createDiv({ cls: "xy-rules-file-picker" });
     const valueButton = picker.createEl("button", {
-      cls: "codex-rules-file-value",
+      cls: "xy-rules-file-value",
       attr: { type: "button", title: copy.knowledge.chooseRulesTitle }
     });
-    const valueIcon = valueButton.createSpan({ cls: "codex-rules-file-icon" });
+    const valueIcon = valueButton.createSpan({ cls: "xy-rules-file-icon" });
     setIcon(valueIcon, "file-cog");
     valueButton.createSpan({ text: currentPath });
     valueButton.onclick = () => this.openKnowledgeBaseRulesFilePicker();
 
     const chooseButton = picker.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.chooseFile,
       attr: { type: "button" }
     });
     chooseButton.onclick = () => this.openKnowledgeBaseRulesFilePicker();
 
     const resetButton = picker.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.useRulesFile(DEFAULT_KNOWLEDGE_BASE_RULES_FILE),
       attr: { type: "button" }
     });
@@ -1239,14 +1241,14 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     };
 
     const repairButton = picker.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.repairRules,
       attr: { type: "button", title: copy.knowledge.repairRulesTitle }
     });
     repairButton.onclick = () => void this.repairKnowledgeBaseRulesFile();
 
     field.createDiv({
-      cls: "codex-resource-note codex-rules-file-note",
+      cls: "xy-resource-note xy-rules-file-note",
       text: settings.useCustomRulesFile
         ? copy.knowledge.rulesFileNoteCustom(settings.rulesFilePath || DEFAULT_KNOWLEDGE_BASE_RULES_FILE, AGENTS_RULES_FILE)
         : copy.knowledge.rulesFileNoteLegacy(AGENTS_RULES_FILE, DEFAULT_KNOWLEDGE_BASE_RULES_FILE)
@@ -1255,23 +1257,23 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private addKnowledgeBaseMemoryRecommendation(container: HTMLElement): void {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.memoryHeading });
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.memoryHeading });
     section.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.memoryNote1
     });
     section.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.memoryNote2
     });
-    const actions = section.createDiv({ cls: "codex-api-provider-actions" });
+    const actions = section.createDiv({ cls: "xy-api-provider-actions" });
     const openMemorySkill = actions.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.openMemorySkill,
-      attr: { type: "button", title: CODEX_MEMORY_LITE_URL }
+      attr: { type: "button", title: MEMORY_LITE_URL }
     });
-    openMemorySkill.onclick = () => window.open(CODEX_MEMORY_LITE_URL);
+    openMemorySkill.onclick = () => window.open(MEMORY_LITE_URL);
   }
 
   private async repairKnowledgeBaseRulesFile(): Promise<void> {
@@ -1320,10 +1322,10 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     placeholder: string,
     onChange: (value: string) => Promise<void>
   ): void {
-    const field = container.createDiv({ cls: "codex-api-provider-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: label });
+    const field = container.createDiv({ cls: "xy-api-provider-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: label });
     const input = field.createEl("textarea", {
-      cls: "codex-api-provider-textarea",
+      cls: "xy-api-provider-textarea",
       attr: { placeholder }
     }) as HTMLTextAreaElement;
     input.value = value;
@@ -1349,25 +1351,25 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private renderWorkspaceResourceManager(container: HTMLElement): void {
     const copy = this.copy;
-    const wrapper = container.createDiv({ cls: "codex-resource-manager" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
+    const wrapper = container.createDiv({ cls: "xy-resource-manager" });
+    const header = wrapper.createDiv({ cls: "xy-resource-manager-header" });
+    const title = header.createDiv({ cls: "xy-resource-manager-title" });
+    const icon = title.createSpan({ cls: "xy-setting-icon" });
     setIcon(icon, "blocks");
     title.createSpan({ text: copy.resources.title });
 
     wrapper.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.resources.note
     });
 
-    const tabs = wrapper.createDiv({ cls: "codex-resource-tabs" });
+    const tabs = wrapper.createDiv({ cls: "xy-resource-tabs" });
     for (const tab of RESOURCE_TABS) {
       const button = tabs.createEl("button", {
-        cls: `codex-resource-tab ${this.plugin.settings.resourceManagementTab === tab.id ? "is-active" : ""}`,
+        cls: `xy-resource-tab ${this.plugin.settings.resourceManagementTab === tab.id ? "is-active" : ""}`,
         attr: { type: "button" }
       });
-      const tabIcon = button.createSpan({ cls: "codex-resource-tab-icon" });
+      const tabIcon = button.createSpan({ cls: "xy-resource-tab-icon" });
       setIcon(tabIcon, tab.icon);
       button.createSpan({ text: copy.resources.tabs[tab.id] });
       button.onclick = async () => {
@@ -1377,10 +1379,10 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       };
     }
     const refresh = tabs.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       attr: { type: "button", title: copy.resources.refreshTitle }
     });
-    const refreshIcon = refresh.createSpan({ cls: "codex-resource-refresh-icon" });
+    const refreshIcon = refresh.createSpan({ cls: "xy-resource-refresh-icon" });
     setIcon(refreshIcon, "refresh-cw");
     refresh.createSpan({ text: this.resourceLoadingTab === this.plugin.settings.resourceManagementTab ? copy.common.loading : copy.common.refresh });
     refresh.disabled = this.resourceLoadingTab === this.plugin.settings.resourceManagementTab;
@@ -1389,18 +1391,18 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const activeTab = this.plugin.settings.resourceManagementTab;
     this.renderResourceSearch(wrapper, activeTab);
 
-    const body = wrapper.createDiv({ cls: "codex-resource-body" });
+    const body = wrapper.createDiv({ cls: "xy-resource-body" });
     const activeMeta = RESOURCE_TABS.find((tab) => tab.id === activeTab);
     const isLoading = this.resourceLoadingTab === activeTab;
     const loadError = this.resourceLoadErrors[activeTab] ?? "";
     if (isLoading) {
-      body.createDiv({ cls: "codex-resource-empty", text: copy.resources.loadingTab(activeMeta ? copy.resources.tabs[activeMeta.id] : copy.tabs.resources) });
+      body.createDiv({ cls: "xy-resource-empty", text: copy.resources.loadingTab(activeMeta ? copy.resources.tabs[activeMeta.id] : copy.tabs.resources) });
     }
     if (loadError) {
-      body.createDiv({ cls: "codex-resource-error", text: copy.common.readFailed(loadError) });
+      body.createDiv({ cls: "xy-resource-error", text: copy.common.readFailed(loadError) });
     }
     if (!this.resourceLoaded[activeTab] && !isLoading && !loadError) {
-      body.createDiv({ cls: "codex-resource-empty", text: copy.resources.notLoaded });
+      body.createDiv({ cls: "xy-resource-empty", text: copy.resources.notLoaded });
     }
     if (this.resourceSnapshot && (this.resourceLoaded[activeTab] || isLoading)) this.renderActiveResourceTab(body, this.resourceSnapshot);
     if (!this.resourceLoaded[activeTab] && !isLoading && !loadError) void this.loadWorkspaceResources(false, activeTab);
@@ -1408,11 +1410,11 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
 
   private renderResourceSearch(container: HTMLElement, tab: ResourceManagementTab): void {
     const copy = this.copy;
-    const searchWrap = container.createDiv({ cls: "codex-resource-search" });
-    const icon = searchWrap.createSpan({ cls: "codex-resource-search-icon" });
+    const searchWrap = container.createDiv({ cls: "xy-resource-search" });
+    const icon = searchWrap.createSpan({ cls: "xy-resource-search-icon" });
     setIcon(icon, "search");
     const input = searchWrap.createEl("input", {
-      cls: "codex-resource-search-input",
+      cls: "xy-resource-search-input",
       attr: {
         type: "search",
         placeholder: copy.resources.searchPlaceholder(copy.resources.tabs[tab]),
@@ -1424,14 +1426,14 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       this.resourceSearchQuery[tab] = input.value;
       this.display();
       window.requestAnimationFrame(() => {
-        const next = this.containerEl.querySelector<HTMLInputElement>(".codex-resource-search-input");
+        const next = this.containerEl.querySelector<HTMLInputElement>(".xy-resource-search-input");
         next?.focus();
         next?.setSelectionRange(next.value.length, next.value.length);
       });
     };
     if (input.value) {
       const clear = searchWrap.createEl("button", {
-        cls: "codex-resource-search-clear",
+        cls: "xy-resource-search-clear",
         attr: { type: "button", title: copy.resources.clearSearch, "aria-label": copy.resources.clearSearch }
       });
       setIcon(clear, "x");
@@ -1454,7 +1456,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     this.renderSkillResources(container, snapshot.skills, snapshot.errors.skills);
   }
 
-  private renderPluginResources(container: HTMLElement, plugins: CodexPluginInfo[], error?: string): void {
+  private renderPluginResources(container: HTMLElement, plugins: PluginInfo[], error?: string): void {
     const copy = this.copy;
     const rows = plugins.map((plugin) => ({
       key: plugin.id,
@@ -1468,11 +1470,11 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const filtered = filterWorkspaceResourceRows(rows, query);
     this.renderResourceSummary(container, plugins.length, rows.filter((row) => row.enabled).length, error, filtered.length, query);
     if (!plugins.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noPlugins });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noPlugins });
       return;
     }
     if (!filtered.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noPluginMatches });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noPluginMatches });
       return;
     }
     for (const row of filtered) this.renderResourceRow(container, row);
@@ -1492,20 +1494,20 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const filtered = filterWorkspaceResourceRows(rows, query);
     this.renderResourceSummary(container, servers.length, rows.filter((row) => row.enabled).length, error, filtered.length, query);
     if (!this.plugin.settings.mcpEnabled && servers.length) {
-      container.createDiv({ cls: "codex-resource-warning", text: copy.resources.mcpDisabledWarning });
+      container.createDiv({ cls: "xy-resource-warning", text: copy.resources.mcpDisabledWarning });
     }
     if (!servers.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noMcp });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noMcp });
       return;
     }
     if (!filtered.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noMcpMatches });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noMcpMatches });
       return;
     }
     for (const row of filtered) this.renderResourceRow(container, row);
   }
 
-  private renderSkillResources(container: HTMLElement, skills: CodexSkill[], error?: string): void {
+  private renderSkillResources(container: HTMLElement, skills: SkillSpec[], error?: string): void {
     const copy = this.copy;
     const rows = skills.map((skill) => ({
       key: skill.path || skill.name,
@@ -1519,11 +1521,11 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const filtered = filterWorkspaceResourceRows(rows, query);
     this.renderResourceSummary(container, skills.length, rows.filter((row) => row.enabled).length, error, filtered.length, query);
     if (!skills.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noSkills });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noSkills });
       return;
     }
     if (!filtered.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noSkillMatches });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noSkillMatches });
       return;
     }
     for (const row of filtered) this.renderResourceRow(container, row);
@@ -1532,8 +1534,8 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderResourceSummary(container: HTMLElement, total: number, enabled: number, error?: string, visible = total, query = ""): void {
     const copy = this.copy;
     const searching = Boolean(query.trim());
-    container.createDiv({ cls: "codex-resource-summary", text: copy.resources.summary(enabled, total, visible, searching) });
-    if (error) container.createDiv({ cls: "codex-resource-error", text: copy.common.partialReadFailed(error) });
+    container.createDiv({ cls: "xy-resource-summary", text: copy.resources.summary(enabled, total, visible, searching) });
+    if (error) container.createDiv({ cls: "xy-resource-error", text: copy.common.partialReadFailed(error) });
   }
 
   private renderResourceRow(
@@ -1544,15 +1546,15 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     }
   ): void {
     const copy = this.copy;
-    const row = container.createDiv({ cls: `codex-resource-row ${item.enabled ? "is-enabled" : "is-disabled"}` });
-    const icon = row.createSpan({ cls: "codex-resource-row-icon" });
+    const row = container.createDiv({ cls: `xy-resource-row ${item.enabled ? "is-enabled" : "is-disabled"}` });
+    const icon = row.createSpan({ cls: "xy-resource-row-icon" });
     setIcon(icon, item.kind === "skills" ? "sparkles" : item.kind === "mcpServers" ? "blocks" : "package");
-    const content = row.createDiv({ cls: "codex-resource-row-content" });
-    content.createDiv({ cls: "codex-resource-row-name", text: item.name, attr: { title: item.name } });
-    if (item.meta) content.createDiv({ cls: "codex-resource-row-meta", text: item.meta, attr: { title: item.meta } });
-    if (item.desc) content.createDiv({ cls: "codex-resource-row-desc", text: item.desc, attr: { title: item.desc } });
+    const content = row.createDiv({ cls: "xy-resource-row-content" });
+    content.createDiv({ cls: "xy-resource-row-name", text: item.name, attr: { title: item.name } });
+    if (item.meta) content.createDiv({ cls: "xy-resource-row-meta", text: item.meta, attr: { title: item.meta } });
+    if (item.desc) content.createDiv({ cls: "xy-resource-row-desc", text: item.desc, attr: { title: item.desc } });
     const toggle = row.createEl("input", {
-      cls: "codex-resource-toggle",
+      cls: "xy-resource-toggle",
       attr: { type: "checkbox", "aria-label": copy.resources.toggleAria(item.name) }
     }) as HTMLInputElement;
     toggle.checked = item.enabled;
@@ -1571,7 +1573,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     this.display();
     try {
       const status = await this.plugin.ensureOpenCodeConnected();
-      if (!status.connected) throw new Error(this.copy.resources.codexDisconnected);
+      if (!status.connected) throw new Error(this.copy.resources.disconnectedLabel);
       const result = await this.loadResourceTab(tab);
       this.resourceSnapshot = mergeWorkspaceResourceSnapshot(this.resourceSnapshot, result.kind, result.data, result.error);
       this.resourceLoaded[tab] = true;
@@ -1600,44 +1602,39 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     }
   }
 
-  private async loadResourceTab(tab: ResourceManagementTab): Promise<{ kind: WorkspaceResourceKind; data: CodexPluginInfo[] | CodexSkill[] | McpServerStatus[]; error: string | null }> {
-    const backend = new OpenCodeBackend({
-      ...this.plugin.settings.opencode,
-      vaultPath: this.plugin.getVaultPath()
-    });
+  private async loadResourceTab(tab: ResourceManagementTab): Promise<{ kind: WorkspaceResourceKind; data: PluginInfo[] | SkillSpec[] | McpServerStatus[]; error: string | null }> {
     try {
-      await backend.connect();
       if (tab === "plugins") {
-        const result = await backend.refreshPluginResources();
-        return { kind: "plugins", data: result.plugins, error: result.error };
+        return { kind: "plugins", data: [], error: null };
       }
       if (tab === "mcp") {
-        const result = await backend.refreshMcpStatus();
-        return { kind: "mcp", data: result.servers, error: result.error };
+        return { kind: "mcp", data: [], error: null };
       }
-      const result = await backend.refreshSkillResources();
-      return { kind: "skills", data: result.skills, error: result.error };
-    } finally {
-      await backend.disconnect().catch(() => undefined);
+      return { kind: "skills", data: [], error: null };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (tab === "plugins") return { kind: "plugins", data: [], error: message };
+      if (tab === "mcp") return { kind: "mcp", data: [], error: message };
+      return { kind: "skills", data: [], error: message };
     }
   }
 
   private addStatusRow(container: HTMLElement, iconName: string, label: string, value: string): void {
-    const row = container.createDiv({ cls: "codex-settings-status-row" });
-    const icon = row.createSpan({ cls: "codex-settings-status-icon" });
+    const row = container.createDiv({ cls: "xy-settings-status-row" });
+    const icon = row.createSpan({ cls: "xy-settings-status-icon" });
     setIcon(icon, iconName);
-    row.createSpan({ cls: "codex-settings-status-label", text: label });
-    row.createSpan({ cls: "codex-settings-status-value", text: value });
+    row.createSpan({ cls: "xy-settings-status-label", text: label });
+    row.createSpan({ cls: "xy-settings-status-value", text: value });
   }
 
   private decorateSetting(setting: Setting, iconName: string): Setting {
     const nameEl = (setting as any).nameEl as HTMLElement | undefined;
     if (!nameEl) return setting;
     const settingEl = (setting as any).settingEl as HTMLElement | undefined;
-    settingEl?.addClass("codex-setting-with-icon");
-    nameEl.addClass("codex-setting-name-with-icon");
+    settingEl?.addClass("xy-setting-with-icon");
+    nameEl.addClass("xy-setting-name-with-icon");
     const icon = document.createElement("span");
-    icon.addClass("codex-setting-icon");
+    icon.addClass("xy-setting-icon");
     setIcon(icon, iconName);
     nameEl.prepend(icon);
     return setting;
@@ -1730,7 +1727,7 @@ function normalizeAgentBackendForUi(value: string): AgentBackendMode {
 }
 
 function normalizeKnowledgeBackendForUi(value: string): KnowledgeBaseBackendMode {
-  return value === "opencode" ? value : "default";
+  return "opencode";
 }
 
 function knowledgeStatusLabel(value: string, copy: SettingsCopy = settingsCopy("zh-CN")): string {
@@ -1741,9 +1738,9 @@ function knowledgeInitStatusLabel(value: string, copy: SettingsCopy = settingsCo
   return copy.knowledge.initStatusLabels[value as keyof typeof copy.knowledge.initStatusLabels] ?? copy.knowledge.initStatusLabels["not-started"];
 }
 
-function pluginInstallDir(plugin: CodexForObsidianPlugin): string {
+function pluginInstallDir(plugin: XiaoyuanPlugin): string {
   const dir = (plugin.manifest as any).dir;
-  return dir ? `${dir}/` : ".obsidian/plugins/codex-echoink/";
+  return dir ? `${dir}/` : ".obsidian/plugins/xiaoyuan/";
 }
 
 function formatStorageBytes(value: number): string {

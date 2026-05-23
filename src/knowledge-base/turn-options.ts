@@ -1,11 +1,10 @@
 import * as path from "path";
-import type { CodexForObsidianSettings } from "../settings/settings";
-import type { CodexModel, PermissionMode } from "../types/app-server";
-import type { TurnOptions } from "../core/codex-service";
+import type { XiaoyuanSettings } from "../settings/settings";
+import type { ModelOption, PermissionMode, TurnOptions } from "../types/app-server";
 
-export function buildCodexKnowledgeTurnOptions(input: {
-  settings: Pick<CodexForObsidianSettings, "defaultModel" | "defaultReasoning" | "defaultServiceTier" | "mcpEnabled">;
-  availableModels: Array<Pick<CodexModel, "model" | "isDefault">>;
+export function buildKnowledgeTurnOptions(input: {
+  settings: Pick<XiaoyuanSettings, "defaultModel" | "defaultReasoning" | "defaultServiceTier" | "mcpEnabled">;
+  availableModels: Array<Pick<ModelOption, "model" | "isDefault">>;
   vaultPath: string;
   permission: PermissionMode;
   writeScope?: "knowledge-base" | "journal";

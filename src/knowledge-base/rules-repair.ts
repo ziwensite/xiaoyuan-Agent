@@ -16,8 +16,8 @@ export interface KnowledgeBaseRulesRepairResult {
 
 type RulesSettings = Pick<KnowledgeBaseSettings, "useCustomRulesFile" | "rulesFilePath">;
 
-const MINIMUM_RULES_MARKER = "<!-- codex-echoink-kb-minimum-rules:start -->";
-const MINIMUM_RULES_END_MARKER = "<!-- codex-echoink-kb-minimum-rules:end -->";
+const MINIMUM_RULES_MARKER = "<!-- xy-kb-minimum-rules:start -->";
+const MINIMUM_RULES_END_MARKER = "<!-- xy-kb-minimum-rules:end -->";
 
 const MINIMUM_RULE_CHECKS: Array<{ label: string; patterns: RegExp[] }> = [
   { label: "raw/ 正文只读路径整理边界", patterns: [/raw\//i, /(知识库管理|维护任务|维护动作|维护、提炼、体检)/, /(正文只读|禁止改写|不修改正文)/, /(路径可整理|移动|重命名)/] },
@@ -89,7 +89,7 @@ function buildKnowledgeBaseMinimumRulesBlock(now: Date): string {
   return [
     MINIMUM_RULES_MARKER,
     "",
-    `## Codex 知识库最小运行规则`,
+    `## 知识库最小运行规则`,
     "",
     `> 自动补齐时间：${stamp}。模板版本：${KNOWLEDGE_BASE_TEMPLATE_VERSION}。`,
     "",

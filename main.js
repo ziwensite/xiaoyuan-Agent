@@ -631,7 +631,7 @@ var init_modals = __esm({
       onOpen() {
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.createEl("h2", { text: "Codex \u9700\u8981\u4F60\u7684\u9009\u62E9" });
+        contentEl.createEl("h2", { text: "\u9700\u8981\u4F60\u7684\u9009\u62E9" });
         for (const question of this.questions) {
           const options = Array.isArray(question.options) ? question.options : [];
           const setting = new import_obsidian.Setting(contentEl).setName(question.header || question.question).setDesc(question.question || "");
@@ -673,7 +673,7 @@ var init_modals = __esm({
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => CodexForObsidianPlugin
+  default: () => XiaoyuanPlugin
 });
 module.exports = __toCommonJS(main_exports);
 var fsp14 = __toESM(require("fs/promises"));
@@ -815,7 +815,7 @@ function isNotFoundError(error) {
 
 // src/knowledge-base/constants.ts
 var AGENTS_RULES_FILE = "AGENTS.md";
-var CODEX_MEMORY_LITE_URL = "https://github.com/AKin-lvyifang/codex-memory-lite";
+var MEMORY_LITE_URL = "https://github.com/AKin-lvyifang/codex-memory-lite";
 var DEFAULT_KNOWLEDGE_BASE_RULES_FILE = "LLM-WIKI.md";
 var LEGACY_CLAUDE_RULES_FILE = "CLAUDE.md";
 
@@ -981,6 +981,7 @@ var DEFAULT_SETTINGS = {
   settingsVersion: 27,
   settingsLanguage: "zh-CN",
   settingsTab: "general",
+  setup: { completedAt: 0, lastCheckedAt: 0, dismissedVersion: "" },
   agentBackend: "opencode",
   assistantMode: "opencode",
   proxyEnabled: false,
@@ -1231,7 +1232,7 @@ function providerConnectionLabel(settings, language = "zh-CN") {
   if (!provider) return language === "en" ? "Custom API not configured" : "\u81EA\u5B9A\u4E49 API \u672A\u914D\u7F6E";
   return language === "en" ? `Custom API: ${provider.name} \xB7 ${providerModelLabel(provider, language)}` : `\u81EA\u5B9A\u4E49 API\uFF1A${provider.name} \xB7 ${providerModelLabel(provider, language)}`;
 }
-function ensureModelChoices2(models, ...preferredModels) {
+function ensureModelChoices(models, ...preferredModels) {
   const seen = new Set(models.map((item) => item.model));
   const preferred = [];
   for (const value of preferredModels) {
@@ -1782,7 +1783,7 @@ function normalizeApiProviderSelection(settings) {
   if (active) return;
   const first = settings.apiProviders[0];
   settings.activeApiProviderId = first?.id ?? "";
-  if (settings.providerMode === "custom-api" && !first) settings.providerMode = "codex-login";
+  if (settings.providerMode === "custom-api" && !first) settings.providerMode = "custom-api";
 }
 function normalizeApiProviders(value) {
   if (!Array.isArray(value)) return [];
@@ -6772,8 +6773,8 @@ var TEMPLATE_INDEX_FILES = [
 var KNOWN_TOP_LEVEL_DIRS = /* @__PURE__ */ new Set([
   ".obsidian",
   ".git",
-  ".codex",
-  ".codex-memory",
+  ".opencode",
+  ".opencode-memory",
   ".claude",
   ".claudian",
   ".opencode",
@@ -6943,7 +6944,7 @@ function buildKnowledgeBaseRulesTemplate(now) {
     "---",
     `created: ${stamp}`,
     `updated: ${stamp}`,
-    "template: codex-echoink-llm-wiki",
+    "template: xy-llm-wiki",
     `template_version: ${KNOWLEDGE_BASE_TEMPLATE_VERSION}`,
     "---",
     "",
@@ -7016,7 +7017,7 @@ function buildKnowledgeBaseRulesTemplate(now) {
     "## Journal",
     "",
     "\u5199\u65E5\u8BB0\u65F6\u6CBF\u7528 `journal/` \u7684\u5F53\u524D\u76EE\u5F55\u4F53\u7CFB\uFF1B\u6CA1\u6709\u5386\u53F2\u7ED3\u6784\u65F6\uFF0Cdaily \u4F7F\u7528 `journal/daily/YYYY-MM/YYYY-MM-DD-\u5468X.md`\u3002",
-    "\u5199\u4F5C\u9ED8\u8BA4\u603B\u7ED3\u5F53\u5929 Codex \u771F\u5B9E\u5DE5\u4F5C\u8BB0\u5F55\uFF0C\u4F18\u5148\u53C2\u8003\u6700\u8FD1\u65E5\u8BB0\u683C\u5F0F\uFF1B\u5DF2\u5B58\u5728\u65E5\u8BB0\u53EA\u505A\u589E\u91CF\u66F4\u65B0\uFF0C\u4E0D\u8986\u76D6\u7528\u6237\u539F\u6587\u3002",
+    "\u5199\u4F5C\u9ED8\u8BA4\u603B\u7ED3\u5F53\u5929 OpenCode \u771F\u5B9E\u5DE5\u4F5C\u8BB0\u5F55\uFF0C\u4F18\u5148\u53C2\u8003\u6700\u8FD1\u65E5\u8BB0\u683C\u5F0F\uFF1B\u5DF2\u5B58\u5728\u65E5\u8BB0\u53EA\u505A\u589E\u91CF\u66F4\u65B0\uFF0C\u4E0D\u8986\u76D6\u7528\u6237\u539F\u6587\u3002",
     "",
     "## \u5199\u4F5C\u4E0E\u8BED\u8A00",
     "",
@@ -7081,18 +7082,18 @@ function buildTrackerTemplate(now) {
   return [
     "---",
     `created: ${formatDateTime(now)}`,
-    "source: codex-echoink",
+    "source: xiaoyuan",
     "---",
     "",
     "# Ingest Tracker",
     "",
-    "<!-- codex-echoink-kb:start -->",
+    "<!-- xy-kb:start -->",
     "",
-    `## Codex EchoInk \u5904\u7406\u8BB0\u5F55\uFF08${formatDateTime(now)}\uFF09`,
+    `## \u5C0F\u5143 \u5904\u7406\u8BB0\u5F55\uFF08${formatDateTime(now)}\uFF09`,
     "",
     "- \u6682\u65E0",
     "",
-    "<!-- codex-echoink-kb:end -->",
+    "<!-- xy-kb:end -->",
     ""
   ].join("\n");
 }
@@ -7134,8 +7135,8 @@ function normalizeSlashes(value) {
 }
 
 // src/knowledge-base/rules-repair.ts
-var MINIMUM_RULES_MARKER = "<!-- codex-echoink-kb-minimum-rules:start -->";
-var MINIMUM_RULES_END_MARKER = "<!-- codex-echoink-kb-minimum-rules:end -->";
+var MINIMUM_RULES_MARKER = "<!-- xy-kb-minimum-rules:start -->";
+var MINIMUM_RULES_END_MARKER = "<!-- xy-kb-minimum-rules:end -->";
 var MINIMUM_RULE_CHECKS = [
   { label: "raw/ \u6B63\u6587\u53EA\u8BFB\u8DEF\u5F84\u6574\u7406\u8FB9\u754C", patterns: [/raw\//i, /(知识库管理|维护任务|维护动作|维护、提炼、体检)/, /(正文只读|禁止改写|不修改正文)/, /(路径可整理|移动|重命名)/] },
   { label: "raw/ \u666E\u901A\u5BF9\u8BDD\u6388\u6743\u8FB9\u754C", patterns: [/raw\//i, /(普通 Agent 对话|普通对话)/, /(明确要求|用户指令|按用户)/] },
@@ -7196,7 +7197,7 @@ function buildKnowledgeBaseMinimumRulesBlock(now) {
   return [
     MINIMUM_RULES_MARKER,
     "",
-    `## Codex \u77E5\u8BC6\u5E93\u6700\u5C0F\u8FD0\u884C\u89C4\u5219`,
+    `## \u77E5\u8BC6\u5E93\u6700\u5C0F\u8FD0\u884C\u89C4\u5219`,
     "",
     `> \u81EA\u52A8\u8865\u9F50\u65F6\u95F4\uFF1A${stamp}\u3002\u6A21\u677F\u7248\u672C\uFF1A${KNOWLEDGE_BASE_TEMPLATE_VERSION}\u3002`,
     "",
@@ -7292,7 +7293,7 @@ var ZH_CN = {
     hybridDesc: "\u601D\u8003\u89C4\u5212\u7528 API\uFF0C\u6267\u884C\u64CD\u4F5C\u7528 OpenCode"
   },
   status: {
-    codexStatus: "\u8FDE\u63A5\u72B6\u6001",
+    connectionStatus: "\u8FDE\u63A5\u72B6\u6001",
     accountStatus: "\u8D26\u53F7\u72B6\u6001",
     agentBackend: "Agent \u540E\u7AEF",
     connection: "\u8FDE\u63A5\u65B9\u5F0F",
@@ -7325,8 +7326,8 @@ var ZH_CN = {
     settingsLanguageDesc: "\u53EA\u5F71\u54CD\u8BBE\u7F6E\u9875\u663E\u793A\uFF1B\u4E0D\u4F1A\u6539\u5199 Prompt\u3001\u4F1A\u8BDD\u5185\u5BB9\u6216\u7528\u6237\u81EA\u5B9A\u4E49\u540D\u79F0\u3002",
     agentBackend: "Agent \u540E\u7AEF",
     agentBackendDesc: "\u4F7F\u7528\u672C\u673A OpenCode runtime \u548C\u81EA\u914D Provider\u3002",
-    cliPath: "Codex CLI \u8DEF\u5F84",
-    cliPathDesc: "\u5FC5\u987B\u5148\u5B89\u88C5\u5E76\u767B\u5F55 Codex CLI\u3002\u81EA\u5B9A\u4E49 API \u4E5F\u901A\u8FC7 Codex CLI app-server \u8C03\u7528\uFF0C\u4E0D\u662F\u63D2\u4EF6\u76F4\u8FDE API\u3002\u7559\u7A7A\u65F6\u81EA\u52A8\u67E5\u627E\u3002",
+    cliPath: "OpenCode CLI \u8DEF\u5F84",
+    cliPathDesc: "\u5FC5\u987B\u5148\u5B89\u88C5\u5E76\u767B\u5F55 OpenCode CLI\u3002\u81EA\u5B9A\u4E49 API \u4E5F\u901A\u8FC7 OpenCode CLI app-server \u8C03\u7528\uFF0C\u4E0D\u662F\u63D2\u4EF6\u76F4\u8FDE API\u3002\u7559\u7A7A\u65F6\u81EA\u52A8\u67E5\u627E\u3002",
     proxyEnabled: "\u542F\u7528\u672C\u5730\u4EE3\u7406",
     proxyEnabledDesc: "\u53EA\u5F71\u54CD\u63D2\u4EF6\u542F\u52A8\u7684\u8FDB\u7A0B\uFF0C\u4E0D\u6539\u5168\u5C40\u914D\u7F6E\u3002",
     proxyUrl: "\u4EE3\u7406\u5730\u5740",
@@ -7389,7 +7390,7 @@ var ZH_CN = {
     enabled: "\u542F\u7528\u77E5\u8BC6\u5E93\u7BA1\u7406",
     enabledDesc: "\u603B\u5F00\u5173\uFF1A\u53EA\u51B3\u5B9A\u662F\u5426\u5141\u8BB8\u6BCF\u65E5\u81EA\u52A8\u7EF4\u62A4\u548C\u542F\u52A8\u8865\u8DD1\uFF1B\u771F\u6B63\u6BCF\u5929\u8DD1\uFF0C\u8FD8\u9700\u8981\u6253\u5F00\u4E0B\u9762\u7684\u201C\u6BCF\u65E5\u81EA\u52A8\u7EF4\u62A4\u201D\u3002\u53F3\u4FA7\u77E5\u8BC6\u5E93\u9891\u9053\u4ECD\u53EF\u624B\u52A8\u4F7F\u7528\u3002",
     backend: "\u77E5\u8BC6\u5E93\u540E\u7AEF",
-    backendDesc: "\u9ED8\u8BA4\u8DDF\u968F\u57FA\u7840\u8BBE\u7F6E\u91CC\u7684 Agent \u540E\u7AEF\uFF1B\u4E5F\u53EF\u4EE5\u5355\u72EC\u56FA\u5B9A\u4E3A Codex \u6216 OpenCode\u3002",
+    backendDesc: "\u9ED8\u8BA4\u8DDF\u968F\u57FA\u7840\u8BBE\u7F6E\u91CC\u7684 Agent \u540E\u7AEF\uFF1B\u4E5F\u53EF\u4EE5\u5355\u72EC\u56FA\u5B9A\u4E3A OpenCode\u3002",
     followGlobal: (backend) => `\u8DDF\u968F\u5168\u5C40\uFF08${backend}\uFF09`,
     customRules: "\u4F7F\u7528\u81EA\u5B9A\u4E49\u6307\u5357\u6587\u4EF6",
     customRulesDesc: (defaultFile, agentsFile) => `\u9ED8\u8BA4\u4F7F\u7528 ${defaultFile}\uFF1B\u5173\u95ED\u540E\u6539\u7528 Vault \u6839\u76EE\u5F55 ${agentsFile}\uFF0C\u4EC5\u4F5C\u4E3A\u517C\u5BB9\u9009\u9879\u3002`,
@@ -7416,7 +7417,7 @@ var ZH_CN = {
     rulesFileNoteLegacy: (agentsFile, defaultFile) => `\u517C\u5BB9\u6A21\u5F0F\uFF1A\u77E5\u8BC6\u5E93\u4EFB\u52A1\u8BFB\u53D6 Vault \u6839\u76EE\u5F55 ${agentsFile}\u3002\u5EFA\u8BAE\u6539\u7528 ${defaultFile}\u3002`,
     memoryHeading: "\u957F\u671F\u8BB0\u5FC6\u589E\u5F3A",
     memoryNote1: "\u77E5\u8BC6\u5E93\u7BA1\u7406\u4E0D\u5185\u7F6E\u8BB0\u5FC6 Skills\uFF0C\u4E5F\u4E0D\u4F1A\u4FEE\u6539\u5F53\u524D Vault \u7684 AGENTS.md\u3002\u9700\u8981\u8DE8\u4F1A\u8BDD\u7EF4\u62A4\u957F\u671F\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5EFA\u8BAE\u624B\u52A8\u5B89\u88C5 codex-memory-lite\u3002",
-    memoryNote2: "\u4F7F\u7528\u65B9\u5F0F\uFF1A\u8BA9\u4F60\u7684 Codex/OpenCode Agent \u6309\u4ED3\u5E93\u8BF4\u660E\u5B89\u88C5\u8FD9\u4E2A Skill\uFF1B\u8FDB\u5165\u5BF9\u5E94\u5DE5\u4F5C\u533A\u540E\uFF0C\u7531 Agent \u81EA\u5DF1\u8FD0\u884C bootstrap \u521D\u59CB\u5316\u8BB0\u5FC6\u4F53\u7CFB\uFF0C\u518D\u5728 /init\u3001/check\u3001/maintain \u65F6\u6309\u9700\u540C\u6B65\u9879\u76EE\u8BB0\u5FC6\u3002",
+    memoryNote2: "\u4F7F\u7528\u65B9\u5F0F\uFF1A\u8BA9\u4F60\u7684 OpenCode Agent \u6309\u4ED3\u5E93\u8BF4\u660E\u5B89\u88C5\u8FD9\u4E2A Skill\uFF1B\u8FDB\u5165\u5BF9\u5E94\u5DE5\u4F5C\u533A\u540E\uFF0C\u7531 Agent \u81EA\u5DF1\u8FD0\u884C bootstrap \u521D\u59CB\u5316\u8BB0\u5FC6\u4F53\u7CFB\uFF0C\u518D\u5728 /init\u3001/check\u3001/maintain \u65F6\u6309\u9700\u540C\u6B65\u9879\u76EE\u8BB0\u5FC6\u3002",
     openMemorySkill: "\u6253\u5F00 codex-memory-lite",
     storageHeading: "\u5386\u53F2\u4E0E\u5B58\u50A8",
     storageLoading: "\u6B63\u5728\u7EDF\u8BA1\u5386\u53F2\u6570\u636E...",
@@ -7486,8 +7487,8 @@ var ZH_CN = {
     opencodeMode: "OpenCode API \u6A21\u5F0F",
     customApiMode: "\u81EA\u5B9A\u4E49 API \u6A21\u5F0F",
     warningKey: "API key \u4F1A\u660E\u6587\u4FDD\u5B58\u5728 Obsidian \u63D2\u4EF6\u6570\u636E\u91CC\uFF1B\u53EA\u5EFA\u8BAE\u672C\u673A\u4F7F\u7528\uFF0C\u4E0D\u5EFA\u8BAE\u540C\u6B65\u6216\u63D0\u4EA4\u3002",
-    warningApi: "\u81EA\u5B9A\u4E49 API \u4ECD\u9700\u8981\u672C\u673A Codex CLI\u3002Base URL \u5FC5\u987B\u517C\u5BB9 OpenAI Responses API\uFF1B\u53EA\u652F\u6301 /v1/chat/completions \u7684\u901A\u7528 OpenAI \u683C\u5F0F\u901A\u5E38\u4E0D\u53EF\u7528\u3002",
-    loginMode: "Codex \u767B\u5F55\u6001",
+    warningApi: "\u81EA\u5B9A\u4E49 API \u4ECD\u9700\u8981\u672C\u673A OpenCode CLI\u3002Base URL \u5FC5\u987B\u517C\u5BB9 OpenAI Responses API\uFF1B\u53EA\u652F\u6301 /v1/chat/completions \u7684\u901A\u7528 OpenAI \u683C\u5F0F\u901A\u5E38\u4E0D\u53EF\u7528\u3002",
+    loginMode: "OpenCode \u767B\u5F55\u6001",
     add: "\u65B0\u589E",
     addTitle: "\u65B0\u589E API Provider",
     defaultName: "\u81EA\u5B9A\u4E49 API",
@@ -7503,11 +7504,11 @@ var ZH_CN = {
     queryParams: "Query Params",
     responseApiRequirement: "\u8981\u6C42\uFF1A\u670D\u52A1\u7AEF\u9700\u652F\u6301 Responses API\uFF0C\u4F8B\u5982 /v1/responses\uFF1B\u53EA\u652F\u6301 Chat Completions \u7684\u670D\u52A1\u53EF\u80FD\u65E0\u6CD5\u4F7F\u7528\u3002",
     models: "\u6A21\u578B",
-    configChanged: "\u4FEE\u6539\u914D\u7F6E\u540E\uFF0C\u9700\u8981\u518D\u6B21\u70B9\u51FB\u201C\u542F\u7528\u5E76\u91CD\u8FDE\u201D\u624D\u4F1A\u8BA9\u5F53\u524D Codex \u8FDB\u7A0B\u751F\u6548\u3002"
+    configChanged: "\u4FEE\u6539\u914D\u7F6E\u540E\uFF0C\u9700\u8981\u518D\u6B21\u70B9\u51FB\u201C\u542F\u7528\u5E76\u91CD\u8FDE\u201D\u624D\u4F1A\u8BA9\u5F53\u524D OpenCode \u8FDB\u7A0B\u751F\u6548\u3002"
   },
   writing: {
     requestMode: "\u5199\u4F5C\u8BF7\u6C42\u65B9\u5F0F",
-    requestModeDesc: "\u901A\u8FC7\u5F53\u524D Codex CLI \u53D1\u8D77\u8BF7\u6C42\uFF1B\u81EA\u5B9A\u4E49 API \u4ECD\u9700\u672C\u673A Codex CLI \u652F\u6301 Responses API\u3002",
+    requestModeDesc: "\u901A\u8FC7\u5F53\u524D OpenCode CLI \u53D1\u8D77\u8BF7\u6C42\uFF1B\u81EA\u5B9A\u4E49 API \u4ECD\u9700\u672C\u673A OpenCode CLI \u652F\u6301 Responses API\u3002",
     enabled: "\u542F\u7528\u5199\u4F5C\u64CD\u4F5C",
     enabledDesc: "\u5F00\u542F\u540E\uFF0C\u7F16\u8F91\u533A\u9009\u4E2D\u6587\u5B57\u53F3\u952E\u53EF\u9009\u62E9\u6539\u5199\u3001\u6269\u5199\u3001\u7EED\u5199\u3001\u7FFB\u8BD1\u6210\u82F1\u6587\u3002",
     statusSlot: "\u663E\u793A\u4FA7\u680F\u5199\u4F5C\u72B6\u6001",
@@ -7599,14 +7600,12 @@ var ZH_CN = {
     noSkillMatches: "\u6CA1\u6709\u5339\u914D\u7684 Skill\u3002",
     summary: (enabled, total, visible, searching) => searching ? `\u5DF2\u5141\u8BB8 ${enabled} / ${total} \xB7 \u663E\u793A ${visible}` : `\u5DF2\u5141\u8BB8 ${enabled} / ${total}`,
     toggleAria: (name) => `${name} \u5F00\u5173`,
-    codexDisconnected: "\u5C0F\u5143 \u672A\u8FDE\u63A5"
+    disconnectedLabel: "\u5C0F\u5143 \u672A\u8FDE\u63A5"
   },
   backendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   },
   knowledgeBackendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   }
 };
@@ -7641,7 +7640,7 @@ var EN = {
     hybridDesc: "Thinking & planning with API, execution with OpenCode"
   },
   status: {
-    codexStatus: "Status",
+    connectionStatus: "Status",
     accountStatus: "Account",
     agentBackend: "Agent backend",
     connection: "Connection",
@@ -7674,8 +7673,8 @@ var EN = {
     settingsLanguageDesc: "Only changes this settings page. Prompts, chats, and custom names are unchanged.",
     agentBackend: "Agent backend",
     agentBackendDesc: "Uses local OpenCode runtime and configured providers.",
-    cliPath: "Codex CLI path",
-    cliPathDesc: "Install and sign in to Codex CLI first. Custom APIs still run through Codex CLI app-server, not direct plugin calls. Leave empty to auto-detect.",
+    cliPath: "OpenCode CLI path",
+    cliPathDesc: "Install and sign in to OpenCode CLI first. Custom APIs still run through OpenCode CLI app-server, not direct plugin calls. Leave empty to auto-detect.",
     proxyEnabled: "Use local proxy",
     proxyEnabledDesc: "Only affects the plugin's process. It does not change global config.",
     proxyUrl: "Proxy URL",
@@ -7738,7 +7737,7 @@ var EN = {
     enabled: "Enable Knowledge",
     enabledDesc: "Master gate for automatic maintenance and startup catch-up. Daily runs still require Automatic maintenance below. The Knowledge channel remains available for manual work.",
     backend: "Knowledge backend",
-    backendDesc: "Follow the global Agent backend, or pin Knowledge to Codex or OpenCode.",
+    backendDesc: "Follow the global Agent backend, or pin Knowledge to OpenCode.",
     followGlobal: (backend) => `Follow global (${backend})`,
     customRules: "Use custom guide file",
     customRulesDesc: (defaultFile, agentsFile) => `Defaults to ${defaultFile}. Turning this off uses vault-root ${agentsFile} as a compatibility fallback.`,
@@ -7765,7 +7764,7 @@ var EN = {
     rulesFileNoteLegacy: (agentsFile, defaultFile) => `Compatibility mode reads vault-root ${agentsFile}. ${defaultFile} is recommended.`,
     memoryHeading: "Long-term memory",
     memoryNote1: "Knowledge does not bundle memory Skills and will not edit this vault's AGENTS.md. For long-running context, install codex-memory-lite manually.",
-    memoryNote2: "Usage: let your Codex/OpenCode Agent install the Skill from its repo, enter the target workspace, and run bootstrap there. /init, /check, and /maintain can then sync memory as needed.",
+    memoryNote2: "Usage: let your OpenCode Agent install the Skill from its repo, enter the target workspace, and run bootstrap there. /init, /check, and /maintain can then sync memory as needed.",
     openMemorySkill: "Open codex-memory-lite",
     storageHeading: "History and storage",
     storageLoading: "Calculating history storage...",
@@ -7835,8 +7834,8 @@ Output directory: ${outputDir}`,
     opencodeMode: "OpenCode API Mode",
     customApiMode: "Custom API Mode",
     warningKey: "API keys are stored as plain text in Obsidian plugin data. Use locally only; do not sync or commit them.",
-    warningApi: "Custom APIs still require local Codex CLI. Base URL must support OpenAI Responses API. Generic /v1/chat/completions-only services may not work.",
-    loginMode: "Codex login",
+    warningApi: "Custom APIs still require local OpenCode CLI. Base URL must support OpenAI Responses API. Generic /v1/chat/completions-only services may not work.",
+    loginMode: "OpenCode login",
     add: "Add",
     addTitle: "Add API Provider",
     defaultName: "Custom API",
@@ -7852,11 +7851,11 @@ Output directory: ${outputDir}`,
     queryParams: "Query Params",
     responseApiRequirement: "Required: server must support Responses API, such as /v1/responses. Chat Completions-only services may not work.",
     models: "Models",
-    configChanged: "After editing config, click \u201CEnable and reconnect\u201D again to apply it to the current Codex process."
+    configChanged: "After editing config, click \u201CEnable and reconnect\u201D again to apply it to the current OpenCode process."
   },
   writing: {
     requestMode: "Writing request mode",
-    requestModeDesc: "Requests run through the current Codex CLI. Custom APIs still need local Codex CLI support for Responses API.",
+    requestModeDesc: "Requests run through the current OpenCode CLI. Custom APIs still need local OpenCode CLI support for Responses API.",
     enabled: "Enable writing actions",
     enabledDesc: "When enabled, selected editor text can be rewritten, expanded, continued, or translated to English from the context menu.",
     statusSlot: "Show sidebar writing status",
@@ -7948,14 +7947,12 @@ Output directory: ${outputDir}`,
     noSkillMatches: "No matching Skills.",
     summary: (enabled, total, visible, searching) => searching ? `Allowed ${enabled} / ${total} \xB7 Showing ${visible}` : `Allowed ${enabled} / ${total}`,
     toggleAria: (name) => `${name} toggle`,
-    codexDisconnected: "XiaoYuan disconnected"
+    disconnectedLabel: "XiaoYuan disconnected"
   },
   backendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   },
   knowledgeBackendLabels: {
-    "codex-cli": "Codex CLI",
     opencode: "OpenCode API"
   }
 };
@@ -8011,21 +8008,21 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       });
     }), "bot");
     const status = this.plugin.lastStatus;
-    const statusBox = containerEl.createDiv({ cls: "codex-settings-status" });
+    const statusBox = containerEl.createDiv({ cls: "xy-settings-status" });
     if (mode === "opencode") {
-      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
       this.addStatusRow(statusBox, "box", copy.status.currentModel, this.plugin.settings.opencode.modelId || this.plugin.settings.defaultModel || copy.common.unknown);
     } else if (mode === "custom-api") {
       const activeProvider = getActiveApiProvider(this.plugin.settings);
       const apiConnected = activeProvider && activeProvider.baseUrl && activeProvider.apiKey;
-      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, apiConnected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, apiConnected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
       if (activeProvider) {
         this.addStatusRow(statusBox, "box", copy.status.currentModel, activeProvider.model || copy.common.unknown);
       }
     } else {
-      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
       const activeProvider = getActiveApiProvider(this.plugin.settings);
@@ -8098,7 +8095,8 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     this.decorateSetting(
       new import_obsidian2.Setting(containerEl).setName(copy.general.defaultModel).setDesc(copy.general.defaultModelDesc).addDropdown((dropdown) => {
         dropdown.addOption("", copy.general.auto);
-        for (const model of ensureModelChoices2(status?.models ?? [], this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel)) {
+        const modelChoices = (status?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName }));
+        for (const model of ensureModelChoices(modelChoices, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel)) {
           dropdown.addOption(model.model, model.displayName || model.model);
         }
         dropdown.setValue(this.plugin.settings.defaultModel);
@@ -8166,30 +8164,30 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   renderKnowledgeBaseSettings(container) {
     const copy = this.copy;
     const settings = this.plugin.settings.knowledgeBase;
-    const wrapper = container.createDiv({ cls: "codex-api-provider-manager codex-knowledge-settings" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
+    const wrapper = container.createDiv({ cls: "xy-api-provider-manager xy-knowledge-settings" });
+    const header = wrapper.createDiv({ cls: "xy-resource-manager-header" });
+    const title = header.createDiv({ cls: "xy-resource-manager-title" });
+    const icon = title.createSpan({ cls: "xy-setting-icon" });
     (0, import_obsidian2.setIcon)(icon, "library");
     title.createSpan({ text: copy.knowledge.title });
     wrapper.createDiv({
-      cls: "codex-resource-warning",
+      cls: "xy-resource-warning",
       text: copy.knowledge.safety
     });
-    const summary = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    summary.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.statusHeading });
-    summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.recentStatus(knowledgeStatusLabel(settings.lastRunStatus, copy), settings.lastRunAt ? new Date(settings.lastRunAt).toLocaleString() : "") });
-    summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.initialization(knowledgeInitStatusLabel(settings.initialization.status, copy), settings.initialization.rulesFilePath) });
-    summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.guide(settings.useCustomRulesFile ? settings.rulesFilePath : AGENTS_RULES_FILE, settings.useCustomRulesFile) });
-    if (settings.lastReportPath) summary.createDiv({ cls: "codex-resource-note", text: copy.knowledge.recentReport(settings.lastReportPath) });
-    if (settings.lastError) summary.createDiv({ cls: "codex-resource-error", text: settings.lastError });
-    const actions = summary.createDiv({ cls: "codex-api-provider-actions" });
-    const openChannel = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.openChannel, attr: { type: "button" } });
+    const summary = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    summary.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.statusHeading });
+    summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.recentStatus(knowledgeStatusLabel(settings.lastRunStatus, copy), settings.lastRunAt ? new Date(settings.lastRunAt).toLocaleString() : "") });
+    summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.initialization(knowledgeInitStatusLabel(settings.initialization.status, copy), settings.initialization.rulesFilePath) });
+    summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.guide(settings.useCustomRulesFile ? settings.rulesFilePath : AGENTS_RULES_FILE, settings.useCustomRulesFile) });
+    if (settings.lastReportPath) summary.createDiv({ cls: "xy-resource-note", text: copy.knowledge.recentReport(settings.lastReportPath) });
+    if (settings.lastError) summary.createDiv({ cls: "xy-resource-error", text: settings.lastError });
+    const actions = summary.createDiv({ cls: "xy-api-provider-actions" });
+    const openChannel = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.openChannel, attr: { type: "button" } });
     openChannel.onclick = async () => {
       await this.plugin.activateKnowledgeBaseChannel();
       this.display();
     };
-    const initChannel = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.initChannel, attr: { type: "button" } });
+    const initChannel = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.initChannel, attr: { type: "button" } });
     initChannel.onclick = async () => {
       await this.plugin.activateKnowledgeBaseChannel();
       this.plugin.getXiaoyuanView()?.fillKnowledgeBaseCommand("/init ");
@@ -8232,25 +8230,25 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       })
     ), "history");
     wrapper.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.channelNote
     });
   }
   addKnowledgeBaseCommandGuide(container) {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-api-provider-row codex-kb-command-guide" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.commandHeading });
+    const section = container.createDiv({ cls: "xy-api-provider-row xy-kb-command-guide" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.commandHeading });
     for (const item of copy.knowledge.commandGuide) {
-      const row = section.createDiv({ cls: "codex-kb-command-row" });
+      const row = section.createDiv({ cls: "xy-kb-command-row" });
       row.createEl("code", { text: item.command });
       row.createSpan({ text: item.description });
     }
   }
   addKnowledgeBaseStoragePanel(container) {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-api-provider-row codex-kb-storage-panel" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.storageHeading });
-    const statsEl = section.createDiv({ cls: "codex-resource-note", text: copy.knowledge.storageLoading });
+    const section = container.createDiv({ cls: "xy-api-provider-row xy-kb-storage-panel" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.storageHeading });
+    const statsEl = section.createDiv({ cls: "xy-resource-note", text: copy.knowledge.storageLoading });
     void this.plugin.getKnowledgeBaseStorageStats().then((stats) => {
       statsEl.setText(copy.knowledge.storageStats(
         formatStorageBytes(stats.dataJsonBytes),
@@ -8262,22 +8260,22 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     }).catch((error) => {
       statsEl.setText(copy.common.readFailed(error instanceof Error ? error.message : String(error)));
     });
-    const actions = section.createDiv({ cls: "codex-api-provider-actions" });
-    const rebuild = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.rebuildHistory, attr: { type: "button" } });
+    const actions = section.createDiv({ cls: "xy-api-provider-actions" });
+    const rebuild = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.rebuildHistory, attr: { type: "button" } });
     rebuild.onclick = async () => {
       rebuild.disabled = true;
       await this.plugin.rebuildKnowledgeBaseHistoryIndex();
       new import_obsidian2.Notice(copy.knowledge.historyRebuilt);
       this.display();
     };
-    const exportButton = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.exportHistory, attr: { type: "button" } });
+    const exportButton = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.exportHistory, attr: { type: "button" } });
     exportButton.onclick = async () => {
       exportButton.disabled = true;
       const exported = await this.plugin.exportKnowledgeBaseHistory();
       new import_obsidian2.Notice(copy.knowledge.historyExported(exported));
       this.display();
     };
-    const compact = actions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.compactHistory, attr: { type: "button" } });
+    const compact = actions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.compactHistory, attr: { type: "button" } });
     compact.onclick = async () => {
       const accepted = await confirmModal(this.app, copy.knowledge.compactHistory, "\u53EA\u538B\u7F29\u65E7\u65E5\u671F\u7684\u8FC7\u7A0B\u8BB0\u5F55\uFF0C\u4E0D\u5220\u9664\u7528\u6237\u4E0E\u52A9\u624B\u6B63\u6587\u3002", "\u538B\u7F29", "\u53D6\u6D88");
       if (!accepted) return;
@@ -8290,19 +8288,19 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   renderReviewSettings(container) {
     const copy = this.copy;
     const settings = this.plugin.settings.review;
-    const wrapper = container.createDiv({ cls: "codex-api-provider-manager codex-review-settings" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
+    const wrapper = container.createDiv({ cls: "xy-api-provider-manager xy-review-settings" });
+    const header = wrapper.createDiv({ cls: "xy-resource-manager-header" });
+    const title = header.createDiv({ cls: "xy-resource-manager-title" });
+    const icon = title.createSpan({ cls: "xy-setting-icon" });
     (0, import_obsidian2.setIcon)(icon, "bar-chart-3");
     title.createSpan({ text: copy.review.title });
-    const summary = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    summary.createDiv({ cls: "codex-editor-actions-heading", text: copy.review.generateHeading });
-    const actions = summary.createDiv({ cls: "codex-api-provider-actions" });
+    const summary = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    summary.createDiv({ cls: "xy-editor-actions-heading", text: copy.review.generateHeading });
+    const actions = summary.createDiv({ cls: "xy-api-provider-actions" });
     this.addReviewAction(actions, copy.review.generateAgent, "agent-chat");
     this.addReviewAction(actions, copy.review.generateKnowledge, "knowledge-base");
-    const paths = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    paths.createDiv({ cls: "codex-editor-actions-heading", text: copy.review.pathsHeading });
+    const paths = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    paths.createDiv({ cls: "xy-editor-actions-heading", text: copy.review.pathsHeading });
     this.addProviderText(paths, copy.review.outputDir, settings.outputDir, DEFAULT_SETTINGS.review.outputDir, async (value) => {
       settings.outputDir = normalizeReviewOutputDir(value, DEFAULT_SETTINGS.review.outputDir);
       await this.plugin.saveSettings();
@@ -8312,18 +8310,18 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     this.addReviewPath(paths, copy.review.knowledgeHtml, settings.reports.knowledgeBase.lastHtmlPath);
     this.addReviewPath(paths, copy.review.agentMarkdown, settings.reports.agentChat.lastMarkdownPath);
     this.addReviewPath(paths, copy.review.agentHtml, settings.reports.agentChat.lastHtmlPath);
-    const reviewOptions = wrapper.createDiv({ cls: "codex-api-provider-row" });
-    reviewOptions.createDiv({ cls: "codex-editor-actions-heading", text: copy.review.settingsHeading });
+    const reviewOptions = wrapper.createDiv({ cls: "xy-api-provider-row" });
+    reviewOptions.createDiv({ cls: "xy-editor-actions-heading", text: copy.review.settingsHeading });
     this.addReviewRangeMode(reviewOptions);
     this.addReviewOpenAfterRun(reviewOptions);
   }
   addReviewPath(container, label, value) {
     if (!value) return;
-    container.createDiv({ cls: "codex-resource-note", text: `${label}\uFF1A${value}` });
+    container.createDiv({ cls: "xy-resource-note", text: `${label}\uFF1A${value}` });
   }
   addReviewAction(container, label, kind) {
     const copy = this.copy;
-    const button = container.createEl("button", { cls: "codex-resource-tab", text: label, attr: { type: "button" } });
+    const button = container.createEl("button", { cls: "xy-resource-tab", text: label, attr: { type: "button" } });
     button.onclick = async () => {
       const reportLabel = copy.review.reportLabels[kind];
       const accepted = await confirmModal(
@@ -8361,12 +8359,12 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   }
   addStatusActions(container) {
     const copy = this.copy;
-    const actions = container.createDiv({ cls: "codex-settings-status-actions" });
+    const actions = container.createDiv({ cls: "xy-settings-status-actions" });
     const refresh = actions.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       attr: { type: "button", title: copy.status.refreshTitle }
     });
-    const icon = refresh.createSpan({ cls: "codex-resource-refresh-icon" });
+    const icon = refresh.createSpan({ cls: "xy-resource-refresh-icon" });
     (0, import_obsidian2.setIcon)(icon, "refresh-cw");
     const label = refresh.createSpan({ text: copy.status.refreshLogin });
     refresh.onclick = async () => {
@@ -8382,23 +8380,23 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     if (!errors.length) return;
     const copy = this.copy;
     for (const error of errors.slice(0, 3)) {
-      const card = container.createDiv({ cls: "codex-settings-status-error" });
-      const title = card.createDiv({ cls: "codex-settings-status-error-title" });
-      const icon = title.createSpan({ cls: "codex-settings-status-icon" });
+      const card = container.createDiv({ cls: "xy-settings-status-error" });
+      const title = card.createDiv({ cls: "xy-settings-status-error-title" });
+      const icon = title.createSpan({ cls: "xy-settings-status-icon" });
       (0, import_obsidian2.setIcon)(icon, "triangle-alert");
       title.createSpan({ text: copy.status.diagnostics });
-      card.createEl("pre", { cls: "codex-settings-status-error-body", text: error });
+      card.createEl("pre", { cls: "xy-settings-status-error-body", text: error });
     }
   }
   renderTopTabs(container) {
     const copy = this.copy;
-    const tabs = container.createDiv({ cls: "codex-settings-tabs" });
+    const tabs = container.createDiv({ cls: "xy-settings-tabs" });
     for (const tab of SETTINGS_TABS) {
       const button = tabs.createEl("button", {
-        cls: `codex-settings-tab ${this.plugin.settings.settingsTab === tab.id ? "is-active" : ""}`,
+        cls: `xy-settings-tab ${this.plugin.settings.settingsTab === tab.id ? "is-active" : ""}`,
         attr: { type: "button" }
       });
-      const icon = button.createSpan({ cls: "codex-settings-tab-icon" });
+      const icon = button.createSpan({ cls: "xy-settings-tab-icon" });
       (0, import_obsidian2.setIcon)(icon, tab.icon);
       button.createSpan({ text: copy.tabs[tab.id] });
       button.onclick = async () => {
@@ -8410,15 +8408,15 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   }
   renderApiProviderManager(container) {
     const copy = this.copy;
-    const wrapper = container.createDiv({ cls: "codex-api-provider-manager" });
+    const wrapper = container.createDiv({ cls: "xy-api-provider-manager" });
     const opencode = this.plugin.settings.opencode;
-    const openCodeSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
-    const openCodeHeader = openCodeSection.createDiv({ cls: "codex-resource-manager-header" });
-    const openCodeTitle = openCodeHeader.createDiv({ cls: "codex-resource-manager-title" });
-    const openCodeIcon = openCodeTitle.createSpan({ cls: "codex-setting-icon" });
+    const openCodeSection = wrapper.createDiv({ cls: "xy-editor-actions-section" });
+    const openCodeHeader = openCodeSection.createDiv({ cls: "xy-resource-manager-header" });
+    const openCodeTitle = openCodeHeader.createDiv({ cls: "xy-resource-manager-title" });
+    const openCodeIcon = openCodeTitle.createSpan({ cls: "xy-setting-icon" });
     (0, import_obsidian2.setIcon)(openCodeIcon, "terminal-square");
     openCodeTitle.createSpan({ text: copy.providers.opencodeMode });
-    openCodeSection.createDiv({ cls: "codex-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
+    openCodeSection.createDiv({ cls: "xy-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
     this.addProviderText(openCodeSection, copy.knowledge.opencodePath, opencode.cliPath, "/opt/homebrew/bin/opencode", async (value) => {
       opencode.cliPath = value.trim();
       await this.plugin.saveSettings();
@@ -8454,31 +8452,31 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     });
     this.addOpenCodeAgentPicker(openCodeSection);
     openCodeSection.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.modelCapabilities(opencode.textEnabled, opencode.imageEnabled, opencode.pdfEnabled)
     });
-    if (opencode.lastError) openCodeSection.createDiv({ cls: "codex-resource-error", text: opencode.lastError });
-    if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeModelsError });
-    if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeAgentsError });
-    const openCodeActions = openCodeSection.createDiv({ cls: "codex-api-provider-actions" });
-    const testOpenCode = openCodeActions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
+    if (opencode.lastError) openCodeSection.createDiv({ cls: "xy-resource-error", text: opencode.lastError });
+    if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "xy-resource-error", text: this.openCodeModelsError });
+    if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "xy-resource-error", text: this.openCodeAgentsError });
+    const openCodeActions = openCodeSection.createDiv({ cls: "xy-api-provider-actions" });
+    const testOpenCode = openCodeActions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
     testOpenCode.onclick = async () => {
       await this.refreshOpenCodeRuntimeOptions();
       this.display();
     };
-    const customApiSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
-    const customApiHeader = customApiSection.createDiv({ cls: "codex-resource-manager-header" });
-    const customApiTitle = customApiHeader.createDiv({ cls: "codex-resource-manager-title" });
-    const customApiIcon = customApiTitle.createSpan({ cls: "codex-setting-icon" });
+    const customApiSection = wrapper.createDiv({ cls: "xy-editor-actions-section" });
+    const customApiHeader = customApiSection.createDiv({ cls: "xy-resource-manager-header" });
+    const customApiTitle = customApiHeader.createDiv({ cls: "xy-resource-manager-title" });
+    const customApiIcon = customApiTitle.createSpan({ cls: "xy-setting-icon" });
     (0, import_obsidian2.setIcon)(customApiIcon, "key-round");
     customApiTitle.createSpan({ text: copy.providers.customApiMode });
     const add = customApiHeader.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       text: copy.providers.add,
       attr: { type: "button", title: copy.providers.addTitle }
     });
     add.onclick = async () => {
-      const defaultProviderModel = this.plugin.settings.defaultModel || this.plugin.lastStatus?.models.find((model) => model.isDefault)?.model || this.plugin.lastStatus?.models[0]?.model || "gpt-5.4";
+      const defaultProviderModel = this.plugin.settings.defaultModel || this.plugin.lastStatus?.models[0]?.modelId || "gpt-5.4";
       const provider = {
         id: newId("provider").replace(/[^A-Za-z0-9_-]/g, "_"),
         name: copy.providers.defaultName,
@@ -8493,23 +8491,23 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       this.display();
     };
     customApiSection.createDiv({
-      cls: "codex-resource-warning",
+      cls: "xy-resource-warning",
       text: copy.providers.warningKey
     });
     customApiSection.createDiv({
-      cls: "codex-resource-warning",
+      cls: "xy-resource-warning",
       text: copy.providers.warningApi
     });
-    const modeRow = customApiSection.createDiv({ cls: "codex-api-provider-mode" });
+    const modeRow = customApiSection.createDiv({ cls: "xy-api-provider-mode" });
     modeRow.createDiv({
-      cls: "codex-resource-summary",
+      cls: "xy-resource-summary",
       text: copy.common.current(providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage))
     });
     if (!this.plugin.settings.apiProviders.length) {
-      customApiSection.createDiv({ cls: "codex-resource-empty", text: copy.providers.empty });
+      customApiSection.createDiv({ cls: "xy-resource-empty", text: copy.providers.empty });
       return;
     }
-    const body = customApiSection.createDiv({ cls: "codex-api-provider-list" });
+    const body = customApiSection.createDiv({ cls: "xy-api-provider-list" });
     for (const provider of this.plugin.settings.apiProviders) {
       this.renderApiProviderRow(body, provider);
     }
@@ -8578,17 +8576,17 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   }
   renderEditorActionList(container, actions) {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.writing.actionsHeading });
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.writing.actionsHeading });
     for (const action of actions) {
-      const row = section.createDiv({ cls: "codex-api-provider-row codex-editor-action-row" });
-      const head = row.createDiv({ cls: "codex-api-provider-head" });
-      const title = head.createDiv({ cls: "codex-api-provider-title" });
-      const icon = title.createSpan({ cls: "codex-resource-row-icon" });
+      const row = section.createDiv({ cls: "xy-api-provider-row xy-editor-action-row" });
+      const head = row.createDiv({ cls: "xy-api-provider-head" });
+      const title = head.createDiv({ cls: "xy-api-provider-title" });
+      const icon = title.createSpan({ cls: "xy-resource-row-icon" });
       (0, import_obsidian2.setIcon)(icon, editorActionIcon(action.id));
       title.createSpan({ text: action.label || action.id });
-      title.createSpan({ cls: "codex-resource-row-meta", text: action.enabled ? copy.writing.enabledMeta : copy.writing.disabledMeta });
-      const toggleWrap = head.createDiv({ cls: "codex-api-provider-actions" });
+      title.createSpan({ cls: "xy-resource-row-meta", text: action.enabled ? copy.writing.enabledMeta : copy.writing.disabledMeta });
+      const toggleWrap = head.createDiv({ cls: "xy-api-provider-actions" });
       new import_obsidian2.Setting(toggleWrap).addToggle(
         (toggle) => toggle.setValue(action.enabled).onChange(async (value) => {
           action.enabled = value;
@@ -8610,20 +8608,21 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   renderEditorActionModeConfigs(container) {
     const copy = this.copy;
     const settings = this.plugin.settings.editorActions;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.writing.qualityModesHeading });
-    const modelChoices = ensureModelChoices2(this.plugin.lastStatus?.models ?? [], "gpt-5.4-mini", "gpt-5.4", "gpt-5.5", DEFAULT_SETTINGS.defaultModel);
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.writing.qualityModesHeading });
+    const rawModels = (this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName }));
+    const modelChoices = ensureModelChoices(rawModels, "gpt-5.4-mini", "gpt-5.4", "gpt-5.5", DEFAULT_SETTINGS.defaultModel);
     for (const mode of EDITOR_ACTION_QUALITY_MODES) {
       const config = settings.modeConfigs[mode.id];
-      const row = section.createDiv({ cls: "codex-api-provider-row codex-editor-mode-row" });
-      const head = row.createDiv({ cls: "codex-api-provider-head" });
-      const title = head.createDiv({ cls: "codex-api-provider-title" });
-      const icon = title.createSpan({ cls: "codex-resource-row-icon" });
+      const row = section.createDiv({ cls: "xy-api-provider-row xy-editor-mode-row" });
+      const head = row.createDiv({ cls: "xy-api-provider-head" });
+      const title = head.createDiv({ cls: "xy-api-provider-title" });
+      const icon = title.createSpan({ cls: "xy-resource-row-icon" });
       (0, import_obsidian2.setIcon)(icon, mode.icon);
       title.createSpan({ text: copy.writing.qualityModes[mode.id].label });
-      title.createSpan({ cls: "codex-resource-row-meta", text: copy.writing.qualityModes[mode.id].desc });
+      title.createSpan({ cls: "xy-resource-row-meta", text: copy.writing.qualityModes[mode.id].desc });
       this.decorateSetting(new import_obsidian2.Setting(row).setName(copy.writing.model).addDropdown((dropdown) => {
-        for (const model of ensureModelChoices2(modelChoices, config.model)) dropdown.addOption(model.model, model.displayName || model.model);
+        for (const model of ensureModelChoices(modelChoices, config.model)) dropdown.addOption(model.model, model.displayName || model.model);
         dropdown.setValue(config.model);
         dropdown.onChange(async (value) => {
           config.model = value;
@@ -8644,11 +8643,11 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   }
   renderEditorStyleList(container, styles) {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    const header = section.createDiv({ cls: "codex-resource-manager-header" });
-    header.createDiv({ cls: "codex-editor-actions-heading", text: copy.writing.stylesHeading });
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    const header = section.createDiv({ cls: "xy-resource-manager-header" });
+    header.createDiv({ cls: "xy-editor-actions-heading", text: copy.writing.stylesHeading });
     const add = header.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       text: copy.writing.addStyle,
       attr: { type: "button" }
     });
@@ -8660,16 +8659,16 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       this.display();
     };
     for (const style of styles) {
-      const row = section.createDiv({ cls: "codex-api-provider-row codex-editor-style-row" });
-      const head = row.createDiv({ cls: "codex-api-provider-head" });
-      const title = head.createDiv({ cls: "codex-api-provider-title" });
-      const icon = title.createSpan({ cls: "codex-resource-row-icon" });
+      const row = section.createDiv({ cls: "xy-api-provider-row xy-editor-style-row" });
+      const head = row.createDiv({ cls: "xy-api-provider-head" });
+      const title = head.createDiv({ cls: "xy-api-provider-title" });
+      const icon = title.createSpan({ cls: "xy-resource-row-icon" });
       (0, import_obsidian2.setIcon)(icon, "palette");
       title.createSpan({ text: style.label || style.id });
-      title.createSpan({ cls: "codex-resource-row-meta", text: style.id });
-      const actions = head.createDiv({ cls: "codex-api-provider-actions" });
+      title.createSpan({ cls: "xy-resource-row-meta", text: style.id });
+      const actions = head.createDiv({ cls: "xy-api-provider-actions" });
       if (!DEFAULT_SETTINGS.editorActions.styles.some((item) => item.id === style.id)) {
-        const remove = actions.createEl("button", { cls: "codex-resource-tab", text: copy.common.delete, attr: { type: "button" } });
+        const remove = actions.createEl("button", { cls: "xy-resource-tab", text: copy.common.delete, attr: { type: "button" } });
         remove.onclick = async () => {
           this.plugin.settings.editorActions.styles = styles.filter((item) => item.id !== style.id);
           if (this.plugin.settings.editorActions.defaultStyleId === style.id) this.plugin.settings.editorActions.defaultStyleId = "clear";
@@ -8693,22 +8692,22 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const activeProvider = getActiveApiProvider(this.plugin.settings);
     const isCollapsed = this.collapsedProviders[provider.id] !== false;
     const row = container.createDiv({
-      cls: `codex-api-provider-row ${activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? "is-active" : ""}`
+      cls: `xy-api-provider-row ${activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? "is-active" : ""}`
     });
-    const head = row.createDiv({ cls: "codex-api-provider-head" });
-    const toggleBtn = head.createEl("button", { cls: "codex-api-provider-toggle", attr: { type: "button" } });
+    const head = row.createDiv({ cls: "xy-api-provider-head" });
+    const toggleBtn = head.createEl("button", { cls: "xy-api-provider-toggle", attr: { type: "button" } });
     (0, import_obsidian2.setIcon)(toggleBtn, isCollapsed ? "chevron-right" : "chevron-down");
     toggleBtn.onclick = () => {
       this.collapsedProviders[provider.id] = !isCollapsed;
       this.display();
     };
-    const title = head.createDiv({ cls: "codex-api-provider-title" });
+    const title = head.createDiv({ cls: "xy-api-provider-title" });
     title.createSpan({ text: provider.name || copy.providers.unnamed });
-    title.createSpan({ cls: "codex-resource-row-meta", text: providerModelLabel(provider, this.plugin.settings.settingsLanguage) });
+    title.createSpan({ cls: "xy-resource-row-meta", text: providerModelLabel(provider, this.plugin.settings.settingsLanguage) });
     title.prepend(toggleBtn);
-    const actions = head.createDiv({ cls: "codex-api-provider-actions" });
+    const actions = head.createDiv({ cls: "xy-api-provider-actions" });
     const enable = actions.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? copy.providers.active : copy.providers.enableReconnect,
       attr: { type: "button" }
     });
@@ -8725,7 +8724,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       this.display();
     };
     const remove = actions.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.common.delete,
       attr: { type: "button" }
     });
@@ -8737,7 +8736,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       if (wasActive) await this.plugin.ensureOpenCodeConnected(true);
       this.display();
     };
-    const content = row.createDiv({ cls: "codex-api-provider-content" });
+    const content = row.createDiv({ cls: "xy-api-provider-content" });
     if (isCollapsed) content.style.display = "none";
     this.addProviderText(content, copy.providers.name, provider.name, copy.providers.namePlaceholder, async (value) => {
       provider.name = value.trim();
@@ -8748,7 +8747,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       provider.baseUrl = value.trim();
       await this.plugin.saveSettings();
     });
-    content.createDiv({ cls: "codex-resource-note", text: copy.providers.responseApiRequirement });
+    content.createDiv({ cls: "xy-resource-note", text: copy.providers.responseApiRequirement });
     this.addProviderTextArea(content, copy.providers.models, getApiProviderModels(provider).join("\n"), "gpt-5.4\ngpt-5.5", async (value) => {
       const models = parseModelList(value);
       provider.models = models;
@@ -8766,16 +8765,16 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       await this.plugin.saveSettings();
     });
     const errors = validateApiProvider(provider, this.plugin.settings.settingsLanguage);
-    if (errors.length) content.createDiv({ cls: "codex-resource-error", text: copy.common.missing(errors) });
+    if (errors.length) content.createDiv({ cls: "xy-resource-error", text: copy.common.missing(errors) });
     if (activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api") {
-      content.createDiv({ cls: "codex-resource-note", text: copy.providers.configChanged });
+      content.createDiv({ cls: "xy-resource-note", text: copy.providers.configChanged });
     }
   }
   addProviderText(container, label, value, placeholder, onChange, type = "text") {
-    const field = container.createDiv({ cls: "codex-api-provider-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: label });
+    const field = container.createDiv({ cls: "xy-api-provider-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: label });
     const input = field.createEl("input", {
-      cls: "codex-api-provider-input",
+      cls: "xy-api-provider-input",
       attr: { type, placeholder, value }
     });
     input.onchange = () => void onChange(input.value);
@@ -8784,13 +8783,13 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const copy = this.copy;
     const opencode = this.plugin.settings.opencode;
     const currentValue = opencode.providerId && opencode.modelId ? openCodeModelChoiceValue({ providerId: opencode.providerId, modelId: opencode.modelId }) : "";
-    const field = container.createDiv({ cls: "codex-api-provider-field codex-opencode-model-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: copy.opencode.model });
-    const controls = field.createDiv({ cls: "codex-opencode-model-picker" });
+    const field = container.createDiv({ cls: "xy-api-provider-field xy-opencode-model-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: copy.opencode.model });
+    const controls = field.createDiv({ cls: "xy-opencode-model-picker" });
     const values = new Set(this.openCodeModelChoices.map((model) => openCodeModelChoiceValue(model)));
     if (this.openCodeModelsLoaded && this.openCodeModelChoices.length) {
       const select = controls.createEl("select", {
-        cls: "codex-api-provider-input codex-opencode-model-select",
+        cls: "xy-api-provider-input xy-opencode-model-select",
         attr: { "aria-label": copy.opencode.chooseModel, title: copy.opencode.chooseModel }
       });
       if (!currentValue) {
@@ -8822,12 +8821,12 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       };
     } else {
       controls.createDiv({
-        cls: "codex-resource-note codex-opencode-model-empty",
+        cls: "xy-resource-note xy-opencode-model-empty",
         text: this.openCodeModelsLoading ? copy.opencode.modelLoading : copy.opencode.refreshModelHint
       });
     }
     const refresh = controls.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: this.openCodeModelsLoading ? copy.common.loading : copy.opencode.refreshModels,
       attr: { type: "button" }
     });
@@ -8835,7 +8834,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     refresh.onclick = () => void this.refreshOpenCodeModels();
     const selectedModel = this.openCodeModelChoices.find((model) => model.providerId === opencode.providerId && model.modelId === opencode.modelId);
     field.createDiv({
-      cls: "codex-resource-note codex-opencode-model-note",
+      cls: "xy-resource-note xy-opencode-model-note",
       text: selectedModel ? copy.opencode.selectedModel(selectedModel.displayName, openCodeModelCapabilityLabel(selectedModel, this.plugin.settings.settingsLanguage)) : copy.opencode.modelNote
     });
   }
@@ -8843,13 +8842,13 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const copy = this.copy;
     const opencode = this.plugin.settings.opencode;
     const currentValue = opencode.agent?.trim() || "build";
-    const field = container.createDiv({ cls: "codex-api-provider-field codex-opencode-agent-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: copy.opencode.agent });
-    const controls = field.createDiv({ cls: "codex-opencode-model-picker" });
+    const field = container.createDiv({ cls: "xy-api-provider-field xy-opencode-agent-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: copy.opencode.agent });
+    const controls = field.createDiv({ cls: "xy-opencode-model-picker" });
     const values = new Set(this.openCodeAgentChoices.map((agent) => openCodeAgentChoiceValue(agent)));
     if (this.openCodeAgentsLoaded && this.openCodeAgentChoices.length) {
       const select = controls.createEl("select", {
-        cls: "codex-api-provider-input codex-opencode-model-select",
+        cls: "xy-api-provider-input xy-opencode-model-select",
         attr: { "aria-label": copy.opencode.chooseAgent, title: copy.opencode.chooseAgent }
       });
       if (!values.has(currentValue)) {
@@ -8869,7 +8868,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       };
     } else {
       const input = controls.createEl("input", {
-        cls: "codex-api-provider-input codex-opencode-model-select",
+        cls: "xy-api-provider-input xy-opencode-model-select",
         attr: {
           type: "text",
           placeholder: "build",
@@ -8884,7 +8883,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       };
     }
     const refresh = controls.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: this.openCodeAgentsLoading ? copy.common.loading : copy.opencode.refreshAgent,
       attr: { type: "button" }
     });
@@ -8892,7 +8891,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     refresh.onclick = () => void this.refreshOpenCodeAgents();
     const selectedAgent = this.openCodeAgentChoices.find((agent) => agent.name === currentValue);
     field.createDiv({
-      cls: "codex-resource-note codex-opencode-model-note",
+      cls: "xy-resource-note xy-opencode-model-note",
       text: selectedAgent ? copy.opencode.selectedAgent(selectedAgent.name, openCodeAgentModeLabel(selectedAgent, this.plugin.settings.settingsLanguage), selectedAgent.description ?? "") : this.openCodeAgentsLoaded ? copy.opencode.agentMissing(currentValue) : copy.opencode.agentHint
     });
   }
@@ -8975,25 +8974,25 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const copy = this.copy;
     const settings = this.plugin.settings.knowledgeBase;
     const currentPath = settings.useCustomRulesFile ? settings.rulesFilePath : AGENTS_RULES_FILE;
-    const field = container.createDiv({ cls: "codex-api-provider-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: copy.knowledge.rulesFile });
-    const picker = field.createDiv({ cls: "codex-rules-file-picker" });
+    const field = container.createDiv({ cls: "xy-api-provider-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: copy.knowledge.rulesFile });
+    const picker = field.createDiv({ cls: "xy-rules-file-picker" });
     const valueButton = picker.createEl("button", {
-      cls: "codex-rules-file-value",
+      cls: "xy-rules-file-value",
       attr: { type: "button", title: copy.knowledge.chooseRulesTitle }
     });
-    const valueIcon = valueButton.createSpan({ cls: "codex-rules-file-icon" });
+    const valueIcon = valueButton.createSpan({ cls: "xy-rules-file-icon" });
     (0, import_obsidian2.setIcon)(valueIcon, "file-cog");
     valueButton.createSpan({ text: currentPath });
     valueButton.onclick = () => this.openKnowledgeBaseRulesFilePicker();
     const chooseButton = picker.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.chooseFile,
       attr: { type: "button" }
     });
     chooseButton.onclick = () => this.openKnowledgeBaseRulesFilePicker();
     const resetButton = picker.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.useRulesFile(DEFAULT_KNOWLEDGE_BASE_RULES_FILE),
       attr: { type: "button" }
     });
@@ -9005,35 +9004,35 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       this.display();
     };
     const repairButton = picker.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.repairRules,
       attr: { type: "button", title: copy.knowledge.repairRulesTitle }
     });
     repairButton.onclick = () => void this.repairKnowledgeBaseRulesFile();
     field.createDiv({
-      cls: "codex-resource-note codex-rules-file-note",
+      cls: "xy-resource-note xy-rules-file-note",
       text: settings.useCustomRulesFile ? copy.knowledge.rulesFileNoteCustom(settings.rulesFilePath || DEFAULT_KNOWLEDGE_BASE_RULES_FILE, AGENTS_RULES_FILE) : copy.knowledge.rulesFileNoteLegacy(AGENTS_RULES_FILE, DEFAULT_KNOWLEDGE_BASE_RULES_FILE)
     });
   }
   addKnowledgeBaseMemoryRecommendation(container) {
     const copy = this.copy;
-    const section = container.createDiv({ cls: "codex-editor-actions-section" });
-    section.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.memoryHeading });
+    const section = container.createDiv({ cls: "xy-editor-actions-section" });
+    section.createDiv({ cls: "xy-editor-actions-heading", text: copy.knowledge.memoryHeading });
     section.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.memoryNote1
     });
     section.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.knowledge.memoryNote2
     });
-    const actions = section.createDiv({ cls: "codex-api-provider-actions" });
+    const actions = section.createDiv({ cls: "xy-api-provider-actions" });
     const openMemorySkill = actions.createEl("button", {
-      cls: "codex-resource-tab",
+      cls: "xy-resource-tab",
       text: copy.knowledge.openMemorySkill,
-      attr: { type: "button", title: CODEX_MEMORY_LITE_URL }
+      attr: { type: "button", title: MEMORY_LITE_URL }
     });
-    openMemorySkill.onclick = () => window.open(CODEX_MEMORY_LITE_URL);
+    openMemorySkill.onclick = () => window.open(MEMORY_LITE_URL);
   }
   async repairKnowledgeBaseRulesFile() {
     const copy = this.copy;
@@ -9069,10 +9068,10 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     }, copy).open();
   }
   addProviderTextArea(container, label, value, placeholder, onChange) {
-    const field = container.createDiv({ cls: "codex-api-provider-field" });
-    field.createDiv({ cls: "codex-api-provider-label", text: label });
+    const field = container.createDiv({ cls: "xy-api-provider-field" });
+    field.createDiv({ cls: "xy-api-provider-label", text: label });
     const input = field.createEl("textarea", {
-      cls: "codex-api-provider-textarea",
+      cls: "xy-api-provider-textarea",
       attr: { placeholder }
     });
     input.value = value;
@@ -9094,23 +9093,23 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   }
   renderWorkspaceResourceManager(container) {
     const copy = this.copy;
-    const wrapper = container.createDiv({ cls: "codex-resource-manager" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
+    const wrapper = container.createDiv({ cls: "xy-resource-manager" });
+    const header = wrapper.createDiv({ cls: "xy-resource-manager-header" });
+    const title = header.createDiv({ cls: "xy-resource-manager-title" });
+    const icon = title.createSpan({ cls: "xy-setting-icon" });
     (0, import_obsidian2.setIcon)(icon, "blocks");
     title.createSpan({ text: copy.resources.title });
     wrapper.createDiv({
-      cls: "codex-resource-note",
+      cls: "xy-resource-note",
       text: copy.resources.note
     });
-    const tabs = wrapper.createDiv({ cls: "codex-resource-tabs" });
+    const tabs = wrapper.createDiv({ cls: "xy-resource-tabs" });
     for (const tab of RESOURCE_TABS) {
       const button = tabs.createEl("button", {
-        cls: `codex-resource-tab ${this.plugin.settings.resourceManagementTab === tab.id ? "is-active" : ""}`,
+        cls: `xy-resource-tab ${this.plugin.settings.resourceManagementTab === tab.id ? "is-active" : ""}`,
         attr: { type: "button" }
       });
-      const tabIcon = button.createSpan({ cls: "codex-resource-tab-icon" });
+      const tabIcon = button.createSpan({ cls: "xy-resource-tab-icon" });
       (0, import_obsidian2.setIcon)(tabIcon, tab.icon);
       button.createSpan({ text: copy.resources.tabs[tab.id] });
       button.onclick = async () => {
@@ -9120,39 +9119,39 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       };
     }
     const refresh = tabs.createEl("button", {
-      cls: "codex-resource-refresh",
+      cls: "xy-resource-refresh",
       attr: { type: "button", title: copy.resources.refreshTitle }
     });
-    const refreshIcon = refresh.createSpan({ cls: "codex-resource-refresh-icon" });
+    const refreshIcon = refresh.createSpan({ cls: "xy-resource-refresh-icon" });
     (0, import_obsidian2.setIcon)(refreshIcon, "refresh-cw");
     refresh.createSpan({ text: this.resourceLoadingTab === this.plugin.settings.resourceManagementTab ? copy.common.loading : copy.common.refresh });
     refresh.disabled = this.resourceLoadingTab === this.plugin.settings.resourceManagementTab;
     refresh.onclick = () => void this.loadWorkspaceResources(true, this.plugin.settings.resourceManagementTab);
     const activeTab = this.plugin.settings.resourceManagementTab;
     this.renderResourceSearch(wrapper, activeTab);
-    const body = wrapper.createDiv({ cls: "codex-resource-body" });
+    const body = wrapper.createDiv({ cls: "xy-resource-body" });
     const activeMeta = RESOURCE_TABS.find((tab) => tab.id === activeTab);
     const isLoading = this.resourceLoadingTab === activeTab;
     const loadError = this.resourceLoadErrors[activeTab] ?? "";
     if (isLoading) {
-      body.createDiv({ cls: "codex-resource-empty", text: copy.resources.loadingTab(activeMeta ? copy.resources.tabs[activeMeta.id] : copy.tabs.resources) });
+      body.createDiv({ cls: "xy-resource-empty", text: copy.resources.loadingTab(activeMeta ? copy.resources.tabs[activeMeta.id] : copy.tabs.resources) });
     }
     if (loadError) {
-      body.createDiv({ cls: "codex-resource-error", text: copy.common.readFailed(loadError) });
+      body.createDiv({ cls: "xy-resource-error", text: copy.common.readFailed(loadError) });
     }
     if (!this.resourceLoaded[activeTab] && !isLoading && !loadError) {
-      body.createDiv({ cls: "codex-resource-empty", text: copy.resources.notLoaded });
+      body.createDiv({ cls: "xy-resource-empty", text: copy.resources.notLoaded });
     }
     if (this.resourceSnapshot && (this.resourceLoaded[activeTab] || isLoading)) this.renderActiveResourceTab(body, this.resourceSnapshot);
     if (!this.resourceLoaded[activeTab] && !isLoading && !loadError) void this.loadWorkspaceResources(false, activeTab);
   }
   renderResourceSearch(container, tab) {
     const copy = this.copy;
-    const searchWrap = container.createDiv({ cls: "codex-resource-search" });
-    const icon = searchWrap.createSpan({ cls: "codex-resource-search-icon" });
+    const searchWrap = container.createDiv({ cls: "xy-resource-search" });
+    const icon = searchWrap.createSpan({ cls: "xy-resource-search-icon" });
     (0, import_obsidian2.setIcon)(icon, "search");
     const input = searchWrap.createEl("input", {
-      cls: "codex-resource-search-input",
+      cls: "xy-resource-search-input",
       attr: {
         type: "search",
         placeholder: copy.resources.searchPlaceholder(copy.resources.tabs[tab]),
@@ -9164,14 +9163,14 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
       this.resourceSearchQuery[tab] = input.value;
       this.display();
       window.requestAnimationFrame(() => {
-        const next = this.containerEl.querySelector(".codex-resource-search-input");
+        const next = this.containerEl.querySelector(".xy-resource-search-input");
         next?.focus();
         next?.setSelectionRange(next.value.length, next.value.length);
       });
     };
     if (input.value) {
       const clear = searchWrap.createEl("button", {
-        cls: "codex-resource-search-clear",
+        cls: "xy-resource-search-clear",
         attr: { type: "button", title: copy.resources.clearSearch, "aria-label": copy.resources.clearSearch }
       });
       (0, import_obsidian2.setIcon)(clear, "x");
@@ -9206,11 +9205,11 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const filtered = filterWorkspaceResourceRows(rows, query);
     this.renderResourceSummary(container, plugins.length, rows.filter((row) => row.enabled).length, error, filtered.length, query);
     if (!plugins.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noPlugins });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noPlugins });
       return;
     }
     if (!filtered.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noPluginMatches });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noPluginMatches });
       return;
     }
     for (const row of filtered) this.renderResourceRow(container, row);
@@ -9229,14 +9228,14 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const filtered = filterWorkspaceResourceRows(rows, query);
     this.renderResourceSummary(container, servers.length, rows.filter((row) => row.enabled).length, error, filtered.length, query);
     if (!this.plugin.settings.mcpEnabled && servers.length) {
-      container.createDiv({ cls: "codex-resource-warning", text: copy.resources.mcpDisabledWarning });
+      container.createDiv({ cls: "xy-resource-warning", text: copy.resources.mcpDisabledWarning });
     }
     if (!servers.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noMcp });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noMcp });
       return;
     }
     if (!filtered.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noMcpMatches });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noMcpMatches });
       return;
     }
     for (const row of filtered) this.renderResourceRow(container, row);
@@ -9255,11 +9254,11 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     const filtered = filterWorkspaceResourceRows(rows, query);
     this.renderResourceSummary(container, skills.length, rows.filter((row) => row.enabled).length, error, filtered.length, query);
     if (!skills.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noSkills });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noSkills });
       return;
     }
     if (!filtered.length) {
-      container.createDiv({ cls: "codex-resource-empty", text: copy.resources.noSkillMatches });
+      container.createDiv({ cls: "xy-resource-empty", text: copy.resources.noSkillMatches });
       return;
     }
     for (const row of filtered) this.renderResourceRow(container, row);
@@ -9267,20 +9266,20 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
   renderResourceSummary(container, total, enabled, error, visible = total, query = "") {
     const copy = this.copy;
     const searching = Boolean(query.trim());
-    container.createDiv({ cls: "codex-resource-summary", text: copy.resources.summary(enabled, total, visible, searching) });
-    if (error) container.createDiv({ cls: "codex-resource-error", text: copy.common.partialReadFailed(error) });
+    container.createDiv({ cls: "xy-resource-summary", text: copy.resources.summary(enabled, total, visible, searching) });
+    if (error) container.createDiv({ cls: "xy-resource-error", text: copy.common.partialReadFailed(error) });
   }
   renderResourceRow(container, item) {
     const copy = this.copy;
-    const row = container.createDiv({ cls: `codex-resource-row ${item.enabled ? "is-enabled" : "is-disabled"}` });
-    const icon = row.createSpan({ cls: "codex-resource-row-icon" });
+    const row = container.createDiv({ cls: `xy-resource-row ${item.enabled ? "is-enabled" : "is-disabled"}` });
+    const icon = row.createSpan({ cls: "xy-resource-row-icon" });
     (0, import_obsidian2.setIcon)(icon, item.kind === "skills" ? "sparkles" : item.kind === "mcpServers" ? "blocks" : "package");
-    const content = row.createDiv({ cls: "codex-resource-row-content" });
-    content.createDiv({ cls: "codex-resource-row-name", text: item.name, attr: { title: item.name } });
-    if (item.meta) content.createDiv({ cls: "codex-resource-row-meta", text: item.meta, attr: { title: item.meta } });
-    if (item.desc) content.createDiv({ cls: "codex-resource-row-desc", text: item.desc, attr: { title: item.desc } });
+    const content = row.createDiv({ cls: "xy-resource-row-content" });
+    content.createDiv({ cls: "xy-resource-row-name", text: item.name, attr: { title: item.name } });
+    if (item.meta) content.createDiv({ cls: "xy-resource-row-meta", text: item.meta, attr: { title: item.meta } });
+    if (item.desc) content.createDiv({ cls: "xy-resource-row-desc", text: item.desc, attr: { title: item.desc } });
     const toggle = row.createEl("input", {
-      cls: "codex-resource-toggle",
+      cls: "xy-resource-toggle",
       attr: { type: "checkbox", "aria-label": copy.resources.toggleAria(item.name) }
     });
     toggle.checked = item.enabled;
@@ -9298,7 +9297,7 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     this.display();
     try {
       const status = await this.plugin.ensureOpenCodeConnected();
-      if (!status.connected) throw new Error(this.copy.resources.codexDisconnected);
+      if (!status.connected) throw new Error(this.copy.resources.disconnectedLabel);
       const result = await this.loadResourceTab(tab);
       this.resourceSnapshot = mergeWorkspaceResourceSnapshot(this.resourceSnapshot, result.kind, result.data, result.error);
       this.resourceLoaded[tab] = true;
@@ -9327,41 +9326,36 @@ var XiaoyuanAgentSettingTab = class extends import_obsidian2.PluginSettingTab {
     }
   }
   async loadResourceTab(tab) {
-    const backend = new OpenCodeBackend({
-      ...this.plugin.settings.opencode,
-      vaultPath: this.plugin.getVaultPath()
-    });
     try {
-      await backend.connect();
       if (tab === "plugins") {
-        const result2 = await backend.refreshPluginResources();
-        return { kind: "plugins", data: result2.plugins, error: result2.error };
+        return { kind: "plugins", data: [], error: null };
       }
       if (tab === "mcp") {
-        const result2 = await backend.refreshMcpStatus();
-        return { kind: "mcp", data: result2.servers, error: result2.error };
+        return { kind: "mcp", data: [], error: null };
       }
-      const result = await backend.refreshSkillResources();
-      return { kind: "skills", data: result.skills, error: result.error };
-    } finally {
-      await backend.disconnect().catch(() => void 0);
+      return { kind: "skills", data: [], error: null };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (tab === "plugins") return { kind: "plugins", data: [], error: message };
+      if (tab === "mcp") return { kind: "mcp", data: [], error: message };
+      return { kind: "skills", data: [], error: message };
     }
   }
   addStatusRow(container, iconName, label, value) {
-    const row = container.createDiv({ cls: "codex-settings-status-row" });
-    const icon = row.createSpan({ cls: "codex-settings-status-icon" });
+    const row = container.createDiv({ cls: "xy-settings-status-row" });
+    const icon = row.createSpan({ cls: "xy-settings-status-icon" });
     (0, import_obsidian2.setIcon)(icon, iconName);
-    row.createSpan({ cls: "codex-settings-status-label", text: label });
-    row.createSpan({ cls: "codex-settings-status-value", text: value });
+    row.createSpan({ cls: "xy-settings-status-label", text: label });
+    row.createSpan({ cls: "xy-settings-status-value", text: value });
   }
   decorateSetting(setting, iconName) {
     const nameEl = setting.nameEl;
     if (!nameEl) return setting;
     const settingEl = setting.settingEl;
-    settingEl?.addClass("codex-setting-with-icon");
-    nameEl.addClass("codex-setting-name-with-icon");
+    settingEl?.addClass("xy-setting-with-icon");
+    nameEl.addClass("xy-setting-name-with-icon");
     const icon = document.createElement("span");
-    icon.addClass("codex-setting-icon");
+    icon.addClass("xy-setting-icon");
     (0, import_obsidian2.setIcon)(icon, iconName);
     nameEl.prepend(icon);
     return setting;
@@ -9437,7 +9431,7 @@ function knowledgeInitStatusLabel(value, copy = settingsCopy("zh-CN")) {
 }
 function pluginInstallDir(plugin) {
   const dir = plugin.manifest.dir;
-  return dir ? `${dir}/` : ".obsidian/plugins/codex-echoink/";
+  return dir ? `${dir}/` : ".obsidian/plugins/xiaoyuan/";
 }
 function formatStorageBytes(value) {
   if (value < 1024) return `${value}B`;
@@ -9485,6 +9479,16 @@ function parseClampedInteger(value, fallback, min, max) {
 var fs4 = __toESM(require("fs"));
 var path8 = __toESM(require("path"));
 var import_obsidian4 = require("obsidian");
+
+// src/core/opencode-diagnostics.ts
+function diagnoseOpenCodeError(error, options) {
+  const message = error instanceof Error ? error.message : String(error);
+  let kind = "unknown";
+  if (/timeout/i.test(message)) kind = "timeout";
+  else if (/ENOENT|not found/i.test(message)) kind = "missing-cli";
+  else if (/app-server/i.test(message)) kind = "app-server";
+  return { kind, text: message };
+}
 
 // src/core/clipboard-images.ts
 var import_promises2 = require("node:fs/promises");
@@ -9541,7 +9545,7 @@ function isImageFile(file) {
 }
 
 // src/core/diff-summary.ts
-var FILE_CHANGE_HEADER_PREFIX = "### Codex file change: ";
+var FILE_CHANGE_HEADER_PREFIX = "### file change: ";
 function buildDiffSummary(changes) {
   const files = changes.map((change) => {
     const counts = countDiffLines(change.diff ?? "");
@@ -10006,8 +10010,7 @@ function isProcessItemType2(itemType) {
 function normalizeRateLimitResponse(value) {
   const byLimitId = normalizeRateLimitsByLimitId(value?.rateLimitsByLimitId);
   const fallback = normalizeRateLimitSnapshot(value?.rateLimits) ?? normalizeRateLimitSnapshotLike(value);
-  const codexEntries = Object.entries(byLimitId ?? {}).filter(([key]) => key.startsWith("codex")).map(([, item]) => item);
-  const candidates = [byLimitId?.codex, ...codexEntries, fallback, ...Object.values(byLimitId ?? {})].filter(
+  const candidates = [fallback, ...Object.values(byLimitId ?? {})].filter(
     (item) => Boolean(item)
   );
   const preferred = candidates.find(hasUsableRateLimitSnapshot) ?? candidates[0] ?? null;
@@ -10043,7 +10046,7 @@ function formatRateLimitUsage(rateLimits) {
   const parts = [primary, secondary].filter((item) => Boolean(item)).map((item) => `${item.label} ${item.remainingPercent}% \xB7 ${item.resetLabel}`);
   return {
     summary,
-    title: parts.length ? `\u5269\u4F59\u989D\u5EA6\uFF1A${parts.join(" / ")}` : "Codex \u7528\u91CF\u6682\u4E0D\u53EF\u7528",
+    title: parts.length ? `\u5269\u4F59\u989D\u5EA6\uFF1A${parts.join(" / ")}` : "\u7528\u91CF\u6682\u4E0D\u53EF\u7528",
     primary,
     secondary
   };
@@ -10393,7 +10396,7 @@ function renderRichText(app, component, container, text) {
       continue;
     }
     if (!line.trim()) {
-      container.createDiv({ cls: "codex-message-spacer" });
+      container.createDiv({ cls: "xy-message-spacer" });
       index += 1;
       continue;
     }
@@ -10404,29 +10407,29 @@ function renderRichText(app, component, container, text) {
 function renderLine(app, component, container, line) {
   const trimmed = line.trim();
   if (/^>\s+/.test(trimmed)) {
-    const callout = container.createDiv({ cls: "codex-message-callout" });
+    const callout = container.createDiv({ cls: "xy-message-callout" });
     renderInline(app, component, callout, trimmed.replace(/^>\s+/, ""));
     return;
   }
   if (trimmed.startsWith("#")) {
     const level = Math.min(4, trimmed.match(/^#+/)?.[0].length ?? 2);
-    const heading = container.createEl(`h${level}`, { cls: "codex-message-heading" });
+    const heading = container.createEl(`h${level}`, { cls: "xy-message-heading" });
     heading.setText(trimmed.replace(/^#+\s*/, ""));
     return;
   }
   if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
-    const row = container.createDiv({ cls: "codex-message-list-row" });
+    const row = container.createDiv({ cls: "xy-message-list-row" });
     const task = trimmed.match(/^[-*]\s+\[([ xX])]\s+(.*)$/);
     if (task) {
-      const box = row.createSpan({ cls: `codex-message-checkbox ${task[1].trim() ? "is-checked" : ""}` });
+      const box = row.createSpan({ cls: `xy-message-checkbox ${task[1].trim() ? "is-checked" : ""}` });
       if (task[1].trim()) box.setText("\u2713");
       renderInline(app, component, row.createSpan(), task[2]);
     } else if (/^\d+\.\s+/.test(trimmed)) {
       const number = trimmed.match(/^(\d+)\.\s+/)?.[1] ?? "1";
-      row.createSpan({ cls: "codex-message-number", text: `${number}.` });
+      row.createSpan({ cls: "xy-message-number", text: `${number}.` });
       renderInline(app, component, row.createSpan(), trimmed.replace(/^\d+\.\s+/, ""));
     } else {
-      row.createSpan({ cls: "codex-message-bullet", text: "\u2022" });
+      row.createSpan({ cls: "xy-message-bullet", text: "\u2022" });
       renderInline(app, component, row.createSpan(), trimmed.replace(/^[-*]\s+/, ""));
     }
     return;
@@ -10434,7 +10437,7 @@ function renderLine(app, component, container, line) {
   const imageMatch = trimmed.match(/!\[\[([^\]]+)\]\]|!\[[^\]]*]\(([^)]+)\)/);
   if (imageMatch) {
     const path21 = imageMatch[1] || imageMatch[2];
-    const wrapper = container.createDiv({ cls: "codex-embedded-image" });
+    const wrapper = container.createDiv({ cls: "xy-embedded-image" });
     const img = wrapper.createEl("img");
     img.src = resolveImageSrc(app, path21);
     img.onclick = () => openImageOverlay(img.src);
@@ -10487,7 +10490,7 @@ function renderVaultNoteLink(app, component, container, segment) {
   if (!resolved && !isHiddenVaultMarkdownPath(segment.targetPath)) return false;
   const targetPath = resolved?.targetPath ?? (0, import_obsidian3.normalizePath)(segment.targetPath);
   const link = container.createEl("a", {
-    cls: "codex-message-note-link",
+    cls: "xy-message-note-link",
     text: segment.text,
     attr: {
       href: "#",
@@ -10552,9 +10555,9 @@ function normalizeFsPath2(value) {
   return value.replace(/\\/g, "/");
 }
 function renderCodeBlock(container, code, language) {
-  const wrapper = container.createDiv({ cls: "codex-code-wrapper" });
-  if (language) wrapper.createSpan({ cls: "codex-code-lang", text: language });
-  const button = wrapper.createEl("button", { cls: "codex-code-copy", attr: { type: "button" } });
+  const wrapper = container.createDiv({ cls: "xy-code-wrapper" });
+  if (language) wrapper.createSpan({ cls: "xy-code-lang", text: language });
+  const button = wrapper.createEl("button", { cls: "xy-code-copy", attr: { type: "button" } });
   (0, import_obsidian3.setIcon)(button, "copy");
   button.onclick = async () => {
     await navigator.clipboard.writeText(code);
@@ -10568,7 +10571,7 @@ function renderCodeBlock(container, code, language) {
   wrapper.createEl("pre").createEl("code", { text: code });
 }
 function renderTable(container, lines) {
-  const table = container.createEl("table", { cls: "codex-message-table" });
+  const table = container.createEl("table", { cls: "xy-message-table" });
   const headerCells = splitTableRow(lines[0]);
   const thead = table.createEl("thead").createEl("tr");
   for (const cell of headerCells) thead.createEl("th", { text: cell });
@@ -10599,7 +10602,7 @@ function splitReadableParagraphs(line) {
   return paragraphs;
 }
 function openImageOverlay(src) {
-  const overlay = document.body.createDiv({ cls: "codex-image-overlay" });
+  const overlay = document.body.createDiv({ cls: "xy-image-overlay" });
   const img = overlay.createEl("img");
   img.src = src;
   overlay.onclick = () => overlay.remove();
@@ -10612,7 +10615,7 @@ function turnWatchdogTimeoutForSession(isKnowledgeBaseSession2, fallbackMs = CHA
 }
 function turnWatchdogTimeoutText(timeoutMs) {
   const minutes = Math.max(1, Math.floor(timeoutMs / 6e4));
-  return `\u8FD9\u8F6E\u56DE\u590D\u8D85\u8FC7 ${minutes} \u5206\u949F\u6CA1\u6709\u5B8C\u6210\uFF0C\u5DF2\u505C\u6B62\u7B49\u5F85\u3002\u53EF\u4EE5\u91CD\u8BD5\u6216\u91CD\u65B0\u8FDE\u63A5 Codex\u3002`;
+  return `\u8FD9\u8F6E\u56DE\u590D\u8D85\u8FC7 ${minutes} \u5206\u949F\u6CA1\u6709\u5B8C\u6210\uFF0C\u5DF2\u505C\u6B62\u7B49\u5F85\u3002\u53EF\u4EE5\u91CD\u8BD5\u6216\u91CD\u65B0\u8FDE\u63A5 OpenCode\u3002`;
 }
 
 // src/ui/xiaoyuan-view.ts
@@ -10621,7 +10624,7 @@ init_modals();
 // src/editor-actions/prompt.ts
 var EDITOR_ACTION_OUTPUT_RULES = [
   "\u53EA\u8FD4\u56DE\u6700\u7EC8\u5019\u9009\u6587\u672C\u3002",
-  "\u628A\u5019\u9009\u6B63\u6587\u653E\u5728 <codex-candidate> \u548C </codex-candidate> \u4E4B\u95F4\u3002",
+  "\u628A\u5019\u9009\u6B63\u6587\u653E\u5728 <opencode-candidate> \u548C </opencode-candidate> \u4E4B\u95F4\u3002",
   "\u6807\u7B7E\u5916\u4E0D\u8981\u8F93\u51FA\u4EFB\u4F55\u5185\u5BB9\uFF1B\u5982\u679C\u8BEF\u8F93\u51FA\uFF0C\u63D2\u4EF6\u4F1A\u4E22\u5F03\u3002",
   "\u4E0D\u8981\u89E3\u91CA\u3002",
   "\u4E0D\u8981\u4F7F\u7528\u4EE3\u7801\u5757\u5305\u88F9\u3002",
@@ -10741,7 +10744,7 @@ function isTranslateAction(actionId) {
 function editorActionStartBlockReason(input) {
   if (!input.running) return null;
   if (!input.activeRunId && !input.activeTurnId && !input.hasEditorActionRun) return null;
-  return "Codex \u6B63\u5728\u5904\u7406\u4E0A\u4E00\u8F6E\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5";
+  return "\u6B63\u5728\u5904\u7406\u4E0A\u4E00\u8F6E\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5";
 }
 function extractEditorActionNotificationIds(params) {
   return {
@@ -11028,8 +11031,8 @@ function cleanEditorActionOutput(value) {
 }
 function validateEditorActionCandidateText(value) {
   const text = value.trim();
-  if (!text) return { ok: false, reason: "Codex \u6CA1\u6709\u8FD4\u56DE\u53EF\u7528\u5019\u9009\u6587\u672C" };
-  if (/<\/?codex-candidate>/i.test(text)) return { ok: false, reason: "\u5019\u9009\u6B63\u6587\u4ECD\u5305\u542B\u5185\u90E8\u6807\u7B7E" };
+  if (!text) return { ok: false, reason: "\u6CA1\u6709\u8FD4\u56DE\u53EF\u7528\u5019\u9009\u6587\u672C" };
+  if (/<\/?opencode-candidate>/i.test(text)) return { ok: false, reason: "\u5019\u9009\u6B63\u6587\u4ECD\u5305\u542B\u5185\u90E8\u6807\u7B7E" };
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   for (const line of lines) {
     if (DISALLOWED_OUTPUT_MARKERS.some((pattern) => pattern.test(line))) {
@@ -11039,7 +11042,7 @@ function validateEditorActionCandidateText(value) {
   return { ok: true };
 }
 function extractCandidateTag(value) {
-  const match = value.match(/<codex-candidate>\s*([\s\S]*?)\s*<\/codex-candidate>/i);
+  const match = value.match(/<opencode-candidate>\s*([\s\S]*?)\s*<\/opencode-candidate>/i);
   return match ? match[1] : null;
 }
 function stripOuterFence(value) {
@@ -11346,7 +11349,7 @@ async function exportKnowledgeBaseHistory(vaultPath, pluginDir, outputDir = "out
     }
     sessions.push({ ...session, days });
   }
-  const relative10 = `${outputDir.replace(/^\/+|\/+$/g, "")}/codex-echoink-history-export-${localDateKeyForTimestamp(Date.now())}-${Date.now()}.json`;
+  const relative10 = `${outputDir.replace(/^\/+|\/+$/g, "")}/xy-history-export-${localDateKeyForTimestamp(Date.now())}-${Date.now()}.json`;
   const absolute = path7.join(vaultPath, relative10);
   await writeJsonAtomic(absolute, { version: KNOWLEDGE_BASE_HISTORY_VERSION, exportedAt: Date.now(), sessions });
   return relative10.replace(/\\/g, "/");
@@ -11692,8 +11695,8 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
     this.clearTurnWatchdog();
     this.clearEditorActionStatusTimers();
     this.clearEditorSummaryTimers();
-    this.rejectEditorActionRun(new Error("Codex \u4FA7\u680F\u5DF2\u5173\u95ED"));
-    this.rejectEditorSummaryRun(new Error("Codex \u4FA7\u680F\u5DF2\u5173\u95ED"));
+    this.rejectEditorActionRun(new Error("OpenCode \u4FA7\u680F\u5DF2\u5173\u95ED"));
+    this.rejectEditorSummaryRun(new Error("OpenCode \u4FA7\u680F\u5DF2\u5173\u95ED"));
     await this.plugin.saveSettings(true);
   }
   applySavedComposerDefaults() {
@@ -11723,15 +11726,15 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
     this.renderKnowledgeDashboard();
     void this.refreshKnowledgeDashboard(true);
   }
-  diagnoseCodexFailure(error, model = this.effectiveModel()) {
-    return diagnoseCodexError(error, {
+  diagnoseOpenCodeFailure(error, model = this.effectiveModel()) {
+    return diagnoseOpenCodeError(error, {
       model,
       providerLabel: providerConnectionLabel(this.plugin.settings),
       proxyEnabled: this.plugin.settings.proxyEnabled,
       proxyUrl: this.plugin.settings.proxyUrl
     });
   }
-  handleCodexNotification(notification) {
+  handleOpenCodeNotification(notification) {
     const { method, params } = notification;
     if (this.handleEditorActionNotification(method, params)) return;
     if (method === "turn/started") {
@@ -11753,11 +11756,11 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
       const failed = params?.turn?.status === "failed";
       if (this.editorActionRun?.runId === this.activeRunId) {
         if (failed) {
-          this.rejectEditorActionRun(new Error("Codex \u5199\u4F5C\u4EFB\u52A1\u5931\u8D25"));
+          this.rejectEditorActionRun(new Error("OpenCode \u5199\u4F5C\u4EFB\u52A1\u5931\u8D25"));
         } else if (this.editorActionRun.text.trim()) {
           this.resolveEditorActionRun(this.editorActionRun.text);
         } else {
-          this.rejectEditorActionRun(new Error("Codex \u6CA1\u6709\u8FD4\u56DE\u5019\u9009\u6587\u672C"));
+          this.rejectEditorActionRun(new Error("OpenCode \u6CA1\u6709\u8FD4\u56DE\u5019\u9009\u6587\u672C"));
         }
       }
       this.running = false;
@@ -11835,12 +11838,12 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
       return;
     }
     if (method === "item/completed" && params?.item) {
-      void this.renderCompletedItem(this.activeRunSession(), params.item).catch((error) => console.error("Codex item render failed", error));
+      void this.renderCompletedItem(this.activeRunSession(), params.item).catch((error) => console.error("OpenCode item render failed", error));
       return;
     }
     if (method === "error") {
       const session = this.activeRunSession();
-      const diagnostic = this.diagnoseCodexFailure(params?.message ?? "Codex \u51FA\u9519\u4E86");
+      const diagnostic = this.diagnoseOpenCodeFailure(params?.message ?? "OpenCode \u51FA\u9519\u4E86");
       if (this.editorActionRun?.runId === this.activeRunId) this.rejectEditorActionRun(new Error(diagnostic.text));
       this.running = false;
       this.activeTurnId = "";
@@ -11875,11 +11878,11 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
     if (method === "turn/completed") {
       const failed = params?.turn?.status === "failed";
       if (failed) {
-        this.rejectEditorActionRun(new Error("Codex \u5199\u4F5C\u4EFB\u52A1\u5931\u8D25"));
+        this.rejectEditorActionRun(new Error("OpenCode \u5199\u4F5C\u4EFB\u52A1\u5931\u8D25"));
       } else if (this.editorActionRun?.text.trim()) {
         this.resolveEditorActionRun(this.editorActionRun.text);
       } else {
-        this.rejectEditorActionRun(new Error("Codex \u6CA1\u6709\u8FD4\u56DE\u5019\u9009\u6587\u672C"));
+        this.rejectEditorActionRun(new Error("OpenCode \u6CA1\u6709\u8FD4\u56DE\u5019\u9009\u6587\u672C"));
       }
       this.running = false;
       this.activeTurnId = "";
@@ -11893,7 +11896,7 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
       return true;
     }
     if (method === "error") {
-      this.rejectEditorActionRun(new Error(this.diagnoseCodexFailure(params?.message ?? "Codex \u51FA\u9519\u4E86").text));
+      this.rejectEditorActionRun(new Error(this.diagnoseOpenCodeFailure(params?.message ?? "OpenCode \u51FA\u9519\u4E86").text));
       this.running = false;
       this.activeTurnId = "";
       this.clearTurnWatchdog();
@@ -11936,7 +11939,7 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
     }
     if (method === "error") {
       const runId = this.editorSummaryRun?.runId;
-      this.rejectEditorSummaryRun(new Error(this.diagnoseCodexFailure(params?.message ?? "\u6458\u8981\u751F\u6210\u5931\u8D25").text));
+      this.rejectEditorSummaryRun(new Error(this.diagnoseOpenCodeFailure(params?.message ?? "\u6458\u8981\u751F\u6210\u5931\u8D25").text));
       this.releaseEditorSummaryRunLock(runId);
       return true;
     }
@@ -11950,20 +11953,20 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
   }
   render() {
     this.contentEl.empty();
-    this.rootEl = this.contentEl.createDiv({ cls: "codex-container" });
-    const header = this.rootEl.createDiv({ cls: "codex-header" });
-    const title = header.createDiv({ cls: "codex-title" });
-    const icon = title.createSpan({ cls: "codex-title-icon codex-title-icon-codex", attr: { "aria-hidden": "true" } });
+    this.rootEl = this.contentEl.createDiv({ cls: "xy-container" });
+    const header = this.rootEl.createDiv({ cls: "xy-header" });
+    const title = header.createDiv({ cls: "xy-title" });
+    const icon = title.createSpan({ cls: "xy-title-icon xy-title-icon-opencode", attr: { "aria-hidden": "true" } });
     (0, import_obsidian4.setIcon)(icon, "bot");
-    title.createSpan({ cls: "codex-title-text", text: "\u5C0F\u5143" });
-    const headerActions = header.createDiv({ cls: "codex-header-actions" });
+    title.createSpan({ cls: "xy-title-text", text: "\u5C0F\u5143" });
+    const headerActions = header.createDiv({ cls: "xy-header-actions" });
     this.editorActionStatusEl = headerActions.createDiv({
-      cls: "codex-status-chip codex-editor-action-status is-idle",
+      cls: "xy-status-chip xy-editor-action-status is-idle",
       attr: { role: "button", tabindex: "0", "aria-label": "\u5199\u4F5C\u4E0A\u4E0B\u6587" }
     });
-    const editorActionIcon2 = this.editorActionStatusEl.createSpan({ cls: "codex-header-status-icon" });
+    const editorActionIcon2 = this.editorActionStatusEl.createSpan({ cls: "xy-header-status-icon" });
     (0, import_obsidian4.setIcon)(editorActionIcon2, "wand-sparkles");
-    this.editorActionStatusTextEl = this.editorActionStatusEl.createSpan({ cls: "codex-header-status-text", text: "\u5199\u4F5C" });
+    this.editorActionStatusTextEl = this.editorActionStatusEl.createSpan({ cls: "xy-header-status-text", text: "\u5199\u4F5C" });
     this.editorActionStatusEl.onclick = (event) => {
       event.stopPropagation();
       this.articleUnderstandingPanelVisible = !this.articleUnderstandingPanelVisible;
@@ -11978,29 +11981,29 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
       this.renderArticleUnderstandingPanel();
     };
     this.headerHistoryEl = headerActions.createEl("button", {
-      cls: "codex-status-chip codex-header-history is-hidden",
+      cls: "xy-status-chip xy-header-history is-hidden",
       attr: { type: "button", title: "\u67E5\u770B\u77E5\u8BC6\u5E93\u5386\u53F2", "aria-label": "\u67E5\u770B\u77E5\u8BC6\u5E93\u5386\u53F2" }
     });
-    const historyIcon = this.headerHistoryEl.createSpan({ cls: "codex-header-status-icon" });
+    const historyIcon = this.headerHistoryEl.createSpan({ cls: "xy-header-status-icon" });
     (0, import_obsidian4.setIcon)(historyIcon, "history");
-    this.headerHistoryEl.createSpan({ cls: "codex-header-status-text", text: "\u5386\u53F2" });
+    this.headerHistoryEl.createSpan({ cls: "xy-header-status-text", text: "\u5386\u53F2" });
     this.headerHistoryEl.onclick = (event) => {
       event.stopPropagation();
       const session = this.ensureSession();
       if (!this.isKnowledgeBaseSession(session)) return;
       void this.openKnowledgeBaseHistory(session);
     };
-    this.headerStatusEl = headerActions.createDiv({ cls: "codex-header-status codex-status-chip" });
-    const statusIcon = this.headerStatusEl.createSpan({ cls: "codex-header-status-icon" });
+    this.headerStatusEl = headerActions.createDiv({ cls: "xy-header-status xy-status-chip" });
+    const statusIcon = this.headerStatusEl.createSpan({ cls: "xy-header-status-icon" });
     (0, import_obsidian4.setIcon)(statusIcon, "activity");
-    this.headerStatusTextEl = this.headerStatusEl.createSpan({ cls: "codex-header-status-text", text: "\u8FDE\u63A5\u4E2D" });
+    this.headerStatusTextEl = this.headerStatusEl.createSpan({ cls: "xy-header-status-text", text: "\u8FDE\u63A5\u4E2D" });
     this.headerUsageEl = headerActions.createEl("button", {
-      cls: "codex-status-chip codex-usage-chip",
+      cls: "xy-status-chip xy-usage-chip",
       attr: { type: "button", "aria-label": "\u7528\u91CF", title: "\u7528\u91CF" }
     });
-    const usageIcon = this.headerUsageEl.createSpan({ cls: "codex-header-status-icon" });
+    const usageIcon = this.headerUsageEl.createSpan({ cls: "xy-header-status-icon" });
     (0, import_obsidian4.setIcon)(usageIcon, "gauge");
-    this.headerUsageTextEl = this.headerUsageEl.createSpan({ cls: "codex-header-status-text", text: "\u7528\u91CF --" });
+    this.headerUsageTextEl = this.headerUsageEl.createSpan({ cls: "xy-header-status-text", text: "\u7528\u91CF --" });
     this.headerUsageEl.onclick = async (event) => {
       event.stopPropagation();
       const willShow = !this.usagePanelEl.hasClass("is-visible");
@@ -12008,31 +12011,31 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
       if (willShow) await this.refreshHeaderRateLimits();
     };
     const resourceButton = headerActions.createEl("button", {
-      cls: "codex-icon-button codex-resource-button",
+      cls: "xy-icon-button xy-resource-button",
       attr: { type: "button", "aria-label": "\u63D2\u4EF6 MCP Skills \u7BA1\u7406", title: "\u63D2\u4EF6 / MCP / Skills \u7BA1\u7406" }
     });
     (0, import_obsidian4.setIcon)(resourceButton, "blocks");
     resourceButton.onclick = () => void this.plugin.openWorkspaceResourceSettings("plugins");
     const settingsButton = headerActions.createEl("button", {
-      cls: "codex-icon-button codex-settings-button",
+      cls: "xy-icon-button xy-settings-button",
       attr: { type: "button", "aria-label": "\u6253\u5F00\u63D2\u4EF6\u8BBE\u7F6E", title: "\u6253\u5F00\u63D2\u4EF6\u8BBE\u7F6E" }
     });
     renderSettingsGearIcon(settingsButton);
     settingsButton.onclick = () => this.openPluginSettings();
-    this.usagePanelEl = header.createDiv({ cls: "codex-usage-panel" });
-    this.articleUnderstandingPanelEl = header.createDiv({ cls: "codex-article-panel" });
+    this.usagePanelEl = header.createDiv({ cls: "xy-usage-panel" });
+    this.articleUnderstandingPanelEl = header.createDiv({ cls: "xy-article-panel" });
     this.registerDomEvent(document, "click", (event) => {
       if (!this.rootEl.contains(event.target)) this.usagePanelEl.removeClass("is-visible");
     });
-    this.tabBarEl = this.rootEl.createDiv({ cls: "codex-tabs" });
-    this.knowledgeDashboardEl = this.rootEl.createDiv({ cls: "codex-kb-dashboard" });
-    this.messagesEl = this.rootEl.createDiv({ cls: "codex-messages" });
-    this.virtualListEl = this.messagesEl.createDiv({ cls: "codex-virtual-list" });
+    this.tabBarEl = this.rootEl.createDiv({ cls: "xy-tabs" });
+    this.knowledgeDashboardEl = this.rootEl.createDiv({ cls: "xy-kb-dashboard" });
+    this.messagesEl = this.rootEl.createDiv({ cls: "xy-messages" });
+    this.virtualListEl = this.messagesEl.createDiv({ cls: "xy-virtual-list" });
     this.registerDomEvent(this.messagesEl, "scroll", () => this.scheduleRenderMessages({ fromScroll: true }));
-    const inputWrap = this.rootEl.createDiv({ cls: "codex-input-wrap" });
-    this.attachmentsEl = inputWrap.createDiv({ cls: "codex-attachments" });
+    const inputWrap = this.rootEl.createDiv({ cls: "xy-input-wrap" });
+    this.attachmentsEl = inputWrap.createDiv({ cls: "xy-attachments" });
     this.inputEl = inputWrap.createEl("textarea", {
-      cls: "codex-input",
+      cls: "xy-input",
       attr: { placeholder: "\u95EE \u5C0F\u5143\uFF0C\u8BA9\u5B83\u7BA1\u7406\u5F53\u524D Obsidian \u4ED3\u5E93" }
     });
     this.inputEl.addEventListener("input", () => this.onInputChanged());
@@ -12055,9 +12058,9 @@ var XiaoyuanView = class extends import_obsidian4.ItemView {
       inputWrap.removeClass("is-dragging");
       this.handleDroppedFiles(event);
     });
-    this.skillMenuEl = inputWrap.createDiv({ cls: "codex-skill-menu" });
-    this.toolbarEl = inputWrap.createDiv({ cls: "codex-toolbar" });
-    this.mcpPanelEl = this.rootEl.createDiv({ cls: "codex-mcp-panel" });
+    this.skillMenuEl = inputWrap.createDiv({ cls: "xy-skill-menu" });
+    this.toolbarEl = inputWrap.createDiv({ cls: "xy-toolbar" });
+    this.mcpPanelEl = this.rootEl.createDiv({ cls: "xy-mcp-panel" });
     this.renderToolbar();
     this.updateInputPlaceholder();
     this.renderEditorActionStatus();
@@ -12130,30 +12133,30 @@ ${providerLabel}`);
     if (!this.articleUnderstandingPanelVisible || !settings.showContextPanel) return;
     const state = this.articleUnderstandingPanelState;
     const modeConfig = resolveEditorActionModeConfig(settings, state.mode ?? settings.qualityMode);
-    const title = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-title" });
-    const titleIcon = title.createSpan({ cls: "codex-usage-panel-icon" });
+    const title = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-title" });
+    const titleIcon = title.createSpan({ cls: "xy-usage-panel-icon" });
     (0, import_obsidian4.setIcon)(titleIcon, "file-search");
     title.createSpan({ text: "\u5199\u4F5C\u4E0A\u4E0B\u6587" });
-    const meta = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-meta" });
+    const meta = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-meta" });
     this.addArticlePanelRow(meta, "\u6587\u4EF6", state.source?.fileName ?? "\u5F53\u524D\u672A\u9009\u62E9\u7B14\u8BB0");
     this.addArticlePanelRow(meta, "\u6A21\u5F0F", state.modeLabel ?? modeConfig.label);
     this.addArticlePanelRow(meta, "\u6A21\u578B", state.model ?? modeConfig.model);
     this.addArticlePanelRow(meta, "\u72B6\u6001", articleUnderstandingStatusLabel(state.status, state.error));
     this.addArticlePanelRow(meta, "\u66F4\u65B0\u65F6\u95F4", state.entry?.updatedAt ? formatRelativeTime(state.entry.updatedAt) : "\u65E0");
     this.addArticlePanelRow(meta, "\u672C\u6B21\u4F7F\u7528", state.usedInLastRun ? "\u5DF2\u4F7F\u7528\u6587\u7AE0\u7406\u89E3" : "\u672A\u4F7F\u7528\u6587\u7AE0\u7406\u89E3");
-    const body = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-body" });
+    const body = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-body" });
     if (state.entry?.understanding) {
       renderRichText(this.plugin.app, this, body, state.entry.understanding);
     } else if (state.mode === "fast" || settings.qualityMode === "fast") {
-      body.createDiv({ cls: "codex-article-panel-empty", text: "\u5FEB\u901F\u6A21\u5F0F\u5199\u4F5C\u65F6\u4E0D\u4F7F\u7528\u6587\u7AE0\u7406\u89E3\uFF1B\u4E5F\u53EF\u4EE5\u624B\u52A8\u5237\u65B0\uFF0C\u5148\u5EFA\u7ACB\u53EF\u89C1\u4E0A\u4E0B\u6587\u3002" });
+      body.createDiv({ cls: "xy-article-panel-empty", text: "\u5FEB\u901F\u6A21\u5F0F\u5199\u4F5C\u65F6\u4E0D\u4F7F\u7528\u6587\u7AE0\u7406\u89E3\uFF1B\u4E5F\u53EF\u4EE5\u624B\u52A8\u5237\u65B0\uFF0C\u5148\u5EFA\u7ACB\u53EF\u89C1\u4E0A\u4E0B\u6587\u3002" });
     } else {
-      body.createDiv({ cls: "codex-article-panel-empty", text: "\u8FD8\u6CA1\u6709\u6587\u7AE0\u7406\u89E3\u3002\u70B9\u51FB\u5237\u65B0\u7406\u89E3\uFF0C\u6216\u76F4\u63A5\u4F7F\u7528\u8D28\u91CF/\u4E25\u683C\u5199\u4F5C\u89E6\u53D1\u3002" });
+      body.createDiv({ cls: "xy-article-panel-empty", text: "\u8FD8\u6CA1\u6709\u6587\u7AE0\u7406\u89E3\u3002\u70B9\u51FB\u5237\u65B0\u7406\u89E3\uFF0C\u6216\u76F4\u63A5\u4F7F\u7528\u8D28\u91CF/\u4E25\u683C\u5199\u4F5C\u89E6\u53D1\u3002" });
     }
-    const actions = this.articleUnderstandingPanelEl.createDiv({ cls: "codex-article-panel-actions" });
-    const refresh = actions.createEl("button", { cls: "codex-resource-refresh", text: "\u5237\u65B0\u7406\u89E3", attr: { type: "button" } });
+    const actions = this.articleUnderstandingPanelEl.createDiv({ cls: "xy-article-panel-actions" });
+    const refresh = actions.createEl("button", { cls: "xy-resource-refresh", text: "\u5237\u65B0\u7406\u89E3", attr: { type: "button" } });
     refresh.disabled = state.status === "running";
     refresh.onclick = () => void this.refreshArticleUnderstandingFromPanel();
-    const clear = actions.createEl("button", { cls: "codex-resource-tab", text: "\u6E05\u9664\u7406\u89E3", attr: { type: "button" } });
+    const clear = actions.createEl("button", { cls: "xy-resource-tab", text: "\u6E05\u9664\u7406\u89E3", attr: { type: "button" } });
     clear.disabled = !state.source?.filePath && !state.entry?.filePath;
     clear.onclick = async () => {
       const filePath = state.source?.filePath ?? state.entry?.filePath;
@@ -12163,7 +12166,7 @@ ${providerLabel}`);
       await this.plugin.saveSettings();
       this.renderEditorActionStatus();
     };
-    const settingsButton = actions.createEl("button", { cls: "codex-resource-tab", text: "\u6253\u5F00\u8BBE\u7F6E", attr: { type: "button" } });
+    const settingsButton = actions.createEl("button", { cls: "xy-resource-tab", text: "\u6253\u5F00\u8BBE\u7F6E", attr: { type: "button" } });
     settingsButton.onclick = async () => {
       this.plugin.settings.settingsTab = "editorActions";
       await this.plugin.saveSettings();
@@ -12171,9 +12174,9 @@ ${providerLabel}`);
     };
   }
   addArticlePanelRow(container, label, value) {
-    const row = container.createDiv({ cls: "codex-article-panel-row" });
-    row.createSpan({ cls: "codex-article-panel-label", text: label });
-    row.createSpan({ cls: "codex-article-panel-value", text: value });
+    const row = container.createDiv({ cls: "xy-article-panel-row" });
+    row.createSpan({ cls: "xy-article-panel-label", text: label });
+    row.createSpan({ cls: "xy-article-panel-value", text: value });
   }
   clearEditorActionStatusTimers() {
     if (this.editorActionStatusTicker) {
@@ -12194,14 +12197,14 @@ ${providerLabel}`);
     this.renderUsagePanel(cachedRateLimits, null, true);
     const status = await this.plugin.ensureOpenCodeConnected();
     if (requestId !== this.usageRequestId) return;
-    if (!status.connected || !this.plugin.codex) {
+    if (!status.connected || !this.plugin.openCode) {
       this.usageLoading = false;
-      this.usageError = "Codex \u672A\u8FDE\u63A5";
+      this.usageError = "OpenCode \u672A\u8FDE\u63A5";
       this.updateUsageHeader(null, false, this.usageError);
       this.renderUsagePanel(null, this.usageError, false);
       return;
     }
-    const result = await this.plugin.codex.refreshRateLimits();
+    const result = await this.plugin.openCode.refreshRateLimits();
     if (requestId !== this.usageRequestId) return;
     const nextRateLimits = result.rateLimits ?? this.plugin.lastStatus?.rateLimits ?? null;
     const nextRateLimitsByLimitId = result.rateLimitsByLimitId ?? this.plugin.lastStatus?.rateLimitsByLimitId ?? null;
@@ -12221,7 +12224,7 @@ ${providerLabel}`);
     if (!this.headerUsageTextEl) return;
     const usage = formatRateLimitUsage(rateLimits);
     this.headerUsageTextEl.setText(loading && !rateLimits ? "\u8BFB\u53D6\u4E2D" : usage.summary);
-    this.headerUsageEl.setAttr("title", loading ? "\u6B63\u5728\u8BFB\u53D6 Codex \u7528\u91CF" : error && !rateLimits ? `\u8BFB\u53D6\u5931\u8D25\uFF1A${error}` : usage.title);
+    this.headerUsageEl.setAttr("title", loading ? "\u6B63\u5728\u8BFB\u53D6\u7528\u91CF" : error && !rateLimits ? `\u8BFB\u53D6\u5931\u8D25\uFF1A${error}` : usage.title);
     this.headerUsageEl.toggleClass("is-loading", loading);
     this.headerUsageEl.toggleClass("has-warning", Boolean(error && !rateLimits) || !rateLimits && !loading);
     this.headerUsageEl.toggleClass("is-ok", Boolean(rateLimits && !error && !loading));
@@ -12230,32 +12233,32 @@ ${providerLabel}`);
     if (!this.usagePanelEl) return;
     const usage = formatRateLimitUsage(rateLimits);
     this.usagePanelEl.empty();
-    const title = this.usagePanelEl.createDiv({ cls: "codex-usage-panel-title" });
-    const icon = title.createSpan({ cls: "codex-usage-panel-icon" });
+    const title = this.usagePanelEl.createDiv({ cls: "xy-usage-panel-title" });
+    const icon = title.createSpan({ cls: "xy-usage-panel-icon" });
     (0, import_obsidian4.setIcon)(icon, "gauge");
     title.createSpan({ text: "\u5269\u4F59\u989D\u5EA6" });
     if (!usage.primary && !usage.secondary) {
       if (loading) {
-        this.usagePanelEl.createDiv({ cls: "codex-usage-loading", text: "\u6B63\u5728\u8BFB\u53D6 Codex \u7528\u91CF..." });
+        this.usagePanelEl.createDiv({ cls: "xy-usage-loading", text: "\u6B63\u5728\u8BFB\u53D6\u7528\u91CF..." });
         return;
       }
       if (error) {
-        this.usagePanelEl.createDiv({ cls: "codex-usage-error", text: `\u8BFB\u53D6\u5931\u8D25\uFF1A${error}` });
+        this.usagePanelEl.createDiv({ cls: "xy-usage-error", text: `\u8BFB\u53D6\u5931\u8D25\uFF1A${error}` });
         return;
       }
-      this.usagePanelEl.createDiv({ cls: "codex-usage-empty", text: "\u6682\u672A\u8BFB\u53D6\u5230 Codex \u7528\u91CF\u3002" });
+      this.usagePanelEl.createDiv({ cls: "xy-usage-empty", text: "\u6682\u672A\u8BFB\u53D6\u5230\u7528\u91CF\u3002" });
       return;
     }
     if (usage.primary) this.renderUsageRow(usage.primary);
     if (usage.secondary) this.renderUsageRow(usage.secondary);
-    if (loading) this.usagePanelEl.createDiv({ cls: "codex-usage-loading", text: "\u6B63\u5728\u66F4\u65B0..." });
-    if (error) this.usagePanelEl.createDiv({ cls: "codex-usage-error", text: `\u66F4\u65B0\u5931\u8D25\uFF1A${error}` });
+    if (loading) this.usagePanelEl.createDiv({ cls: "xy-usage-loading", text: "\u6B63\u5728\u66F4\u65B0..." });
+    if (error) this.usagePanelEl.createDiv({ cls: "xy-usage-error", text: `\u66F4\u65B0\u5931\u8D25\uFF1A${error}` });
   }
   renderUsageRow(item) {
-    const row = this.usagePanelEl.createDiv({ cls: "codex-usage-row" });
-    row.createDiv({ cls: "codex-usage-label", text: item.label });
-    row.createDiv({ cls: "codex-usage-percent", text: `${item.remainingPercent}%` });
-    row.createDiv({ cls: "codex-usage-reset", text: item.resetLabel });
+    const row = this.usagePanelEl.createDiv({ cls: "xy-usage-row" });
+    row.createDiv({ cls: "xy-usage-label", text: item.label });
+    row.createDiv({ cls: "xy-usage-percent", text: `${item.remainingPercent}%` });
+    row.createDiv({ cls: "xy-usage-reset", text: item.resetLabel });
   }
   openPluginSettings() {
     const setting = this.app.setting;
@@ -12274,7 +12277,7 @@ ${providerLabel}`);
       const knowledgeSession = isKnowledgeBaseSession(session, this.plugin.settings.knowledgeBase.sessionId);
       if (!knowledgeSession) chatIndex += 1;
       const tab = this.tabBarEl.createEl("button", {
-        cls: `codex-tab ${session.id === this.plugin.settings.activeSessionId ? "is-active" : ""} ${knowledgeSession ? "is-knowledge-base" : ""}`.trim(),
+        cls: `xy-tab ${session.id === this.plugin.settings.activeSessionId ? "is-active" : ""} ${knowledgeSession ? "is-knowledge-base" : ""}`.trim(),
         text: knowledgeSession ? "\u77E5\u8BC6\u5E93" : String(chatIndex),
         attr: { type: "button", title: knowledgeSession ? "\u77E5\u8BC6\u5E93\u7BA1\u7406\uFF08\u5E38\u9A7B\uFF09" : session.title || "\u65B0\u4F1A\u8BDD" }
       });
@@ -12299,7 +12302,7 @@ ${providerLabel}`);
         void this.renameSession(session);
       };
     });
-    const newButton = this.tabBarEl.createEl("button", { cls: "codex-tab-new", attr: { type: "button", "aria-label": "\u65B0\u5EFA\u4F1A\u8BDD" } });
+    const newButton = this.tabBarEl.createEl("button", { cls: "xy-tab-new", attr: { type: "button", "aria-label": "\u65B0\u5EFA\u4F1A\u8BDD" } });
     (0, import_obsidian4.setIcon)(newButton, "plus");
     newButton.onclick = async () => {
       this.createSession();
@@ -12329,16 +12332,16 @@ ${providerLabel}`);
     this.virtualListEl.empty();
     if (messages.length === 0) {
       this.virtualListEl.style.height = "100%";
-      const welcome = this.virtualListEl.createDiv({ cls: "codex-welcome" });
-      welcome.createDiv({ cls: "codex-welcome-title", text: knowledgeSession ? "\u77E5\u8BC6\u5E93\u7BA1\u7406" : "What's new?" });
+      const welcome = this.virtualListEl.createDiv({ cls: "xy-welcome" });
+      welcome.createDiv({ cls: "xy-welcome-title", text: knowledgeSession ? "\u77E5\u8BC6\u5E93\u7BA1\u7406" : "What's new?" });
       if (knowledgeSession) {
-        welcome.createDiv({ cls: "codex-resource-note", text: hiddenCount ? `\u5F53\u524D\u9875\u9762\u5DF2\u6E05\u7A7A\uFF0C\u9690\u85CF ${hiddenCount} \u6761\u672C\u5730\u5386\u53F2\uFF1B\u8F93\u5165 /history \u67E5\u770B\u3002` : "\u8F93\u5165 /help \u67E5\u770B\u547D\u4EE4\uFF1B\u4E5F\u53EF\u4EE5\u76F4\u63A5\u8BF4\u53EA\u4F53\u68C0\u4E00\u4E0B\u3001\u7EF4\u62A4\u77E5\u8BC6\u5E93\u3001\u5199\u5468\u62A5\u3001\u6536\u96C6\u8FD9\u4E2A\u94FE\u63A5\u3002" });
+        welcome.createDiv({ cls: "xy-resource-note", text: hiddenCount ? `\u5F53\u524D\u9875\u9762\u5DF2\u6E05\u7A7A\uFF0C\u9690\u85CF ${hiddenCount} \u6761\u672C\u5730\u5386\u53F2\uFF1B\u8F93\u5165 /history \u67E5\u770B\u3002` : "\u8F93\u5165 /help \u67E5\u770B\u547D\u4EE4\uFF1B\u4E5F\u53EF\u4EE5\u76F4\u63A5\u8BF4\u53EA\u4F53\u68C0\u4E00\u4E0B\u3001\u7EF4\u62A4\u77E5\u8BC6\u5E93\u3001\u5199\u5468\u62A5\u3001\u6536\u96C6\u8FD9\u4E2A\u94FE\u63A5\u3002" });
         if (hiddenCount) {
-          const historyButton = welcome.createEl("button", { cls: "codex-kb-history-inline-button", text: "\u67E5\u770B\u5386\u53F2", attr: { type: "button" } });
+          const historyButton = welcome.createEl("button", { cls: "xy-kb-history-inline-button", text: "\u67E5\u770B\u5386\u53F2", attr: { type: "button" } });
           historyButton.onclick = () => this.openKnowledgeBaseHistory(session);
         }
       } else if (!session.cwd) {
-        welcome.createDiv({ cls: "codex-resource-note", text: "\u666E\u901A\u4F1A\u8BDD\u9700\u8981\u5148\u9009\u62E9\u5DE5\u4F5C\u533A\uFF1B\u6DFB\u52A0\u7B14\u8BB0\u53EA\u4F5C\u4E3A\u672C\u8F6E\u4E0A\u4E0B\u6587\u3002" });
+        welcome.createDiv({ cls: "xy-resource-note", text: "\u666E\u901A\u4F1A\u8BDD\u9700\u8981\u5148\u9009\u62E9\u5DE5\u4F5C\u533A\uFF1B\u6DFB\u52A0\u7B14\u8BB0\u53EA\u4F5C\u4E3A\u672C\u8F6E\u4E0A\u4E0B\u6587\u3002" });
       }
       return;
     }
@@ -12356,7 +12359,7 @@ ${providerLabel}`);
     for (const virtualRow of virtual.rows) {
       const row = rows[virtualRow.index];
       if (!row) continue;
-      const rowEl = this.virtualListEl.createDiv({ cls: `codex-virtual-row codex-virtual-row-${row.kind}` });
+      const rowEl = this.virtualListEl.createDiv({ cls: `xy-virtual-row xy-virtual-row-${row.kind}` });
       rowEl.dataset.rowId = virtualRow.id;
       rowEl.dataset.index = String(virtualRow.index);
       rowEl.style.transform = `translateY(${virtualRow.top}px)`;
@@ -12384,12 +12387,12 @@ ${providerLabel}`);
     this.knowledgeDashboardEl.toggleClass("health-risk", healthStatus === "risk");
     this.knowledgeDashboardEl.toggleClass("health-bad", healthStatus === "bad");
     this.knowledgeDashboardEl.toggleClass("is-loading", this.knowledgeDashboardLoading);
-    const header = this.knowledgeDashboardEl.createDiv({ cls: "codex-kb-dashboard-header" });
-    const title = header.createDiv({ cls: "codex-kb-dashboard-title" });
-    const titleIcon = title.createSpan({ cls: "codex-kb-dashboard-icon" });
+    const header = this.knowledgeDashboardEl.createDiv({ cls: "xy-kb-dashboard-header" });
+    const title = header.createDiv({ cls: "xy-kb-dashboard-title" });
+    const titleIcon = title.createSpan({ cls: "xy-kb-dashboard-icon" });
     (0, import_obsidian4.setIcon)(titleIcon, "database");
     title.createSpan({ text: "\u77E5\u8BC6\u5E93\u72B6\u6001" });
-    const summary = header.createDiv({ cls: "codex-kb-dashboard-summary" });
+    const summary = header.createDiv({ cls: "xy-kb-dashboard-summary" });
     if (snapshot) {
       this.addKnowledgeDashboardRulesMetric(summary, snapshot);
       this.addKnowledgeDashboardMetric(summary, "Raw", `${snapshot.raw.fileCount}`);
@@ -12397,25 +12400,25 @@ ${providerLabel}`);
       this.addKnowledgeDashboardMetric(summary, "Inbox", `${snapshot.inbox.fileCount}`);
       this.addKnowledgeDashboardHealthMetric(summary, snapshot.health.status, snapshot.health.label);
     } else {
-      summary.createSpan({ cls: "codex-kb-dashboard-muted", text: this.knowledgeDashboardError || "\u7B49\u5F85\u626B\u63CF" });
+      summary.createSpan({ cls: "xy-kb-dashboard-muted", text: this.knowledgeDashboardError || "\u7B49\u5F85\u626B\u63CF" });
     }
-    const actions = header.createDiv({ cls: "codex-kb-dashboard-actions" });
-    const refresh = actions.createEl("button", { cls: "codex-icon-button codex-kb-dashboard-button", attr: { type: "button", title: "\u5237\u65B0\u72B6\u6001", "aria-label": "\u5237\u65B0\u72B6\u6001" } });
+    const actions = header.createDiv({ cls: "xy-kb-dashboard-actions" });
+    const refresh = actions.createEl("button", { cls: "xy-icon-button xy-kb-dashboard-button", attr: { type: "button", title: "\u5237\u65B0\u72B6\u6001", "aria-label": "\u5237\u65B0\u72B6\u6001" } });
     (0, import_obsidian4.setIcon)(refresh, this.knowledgeDashboardLoading ? "loader-circle" : "refresh-cw");
     refresh.disabled = this.knowledgeDashboardLoading;
     refresh.onclick = () => void this.refreshKnowledgeDashboard(true);
     const toggleTitle = this.knowledgeDashboardExpanded ? "\u6536\u8D77\u8BE6\u60C5" : "\u5C55\u5F00\u8BE6\u60C5";
-    const toggle = actions.createEl("button", { cls: "codex-icon-button codex-kb-dashboard-button", attr: { type: "button", title: toggleTitle, "aria-label": toggleTitle } });
+    const toggle = actions.createEl("button", { cls: "xy-icon-button xy-kb-dashboard-button", attr: { type: "button", title: toggleTitle, "aria-label": toggleTitle } });
     (0, import_obsidian4.setIcon)(toggle, this.knowledgeDashboardExpanded ? "chevron-up" : "chevron-down");
     toggle.onclick = () => {
       this.knowledgeDashboardExpanded = !this.knowledgeDashboardExpanded;
       this.renderKnowledgeDashboard();
     };
     if (this.knowledgeDashboardError) {
-      this.knowledgeDashboardEl.createDiv({ cls: "codex-kb-dashboard-error", text: this.knowledgeDashboardError });
+      this.knowledgeDashboardEl.createDiv({ cls: "xy-kb-dashboard-error", text: this.knowledgeDashboardError });
     }
     if (!snapshot || !this.knowledgeDashboardExpanded) return;
-    const details = this.knowledgeDashboardEl.createDiv({ cls: "codex-kb-dashboard-details" });
+    const details = this.knowledgeDashboardEl.createDiv({ cls: "xy-kb-dashboard-details" });
     this.renderKnowledgeDashboardHealth(details, snapshot);
     this.renderKnowledgeDashboardWiki(details, snapshot);
     this.renderKnowledgeDashboardQueues(details, snapshot);
@@ -12450,13 +12453,13 @@ ${providerLabel}`);
     }
   }
   addKnowledgeDashboardMetric(container, label, value) {
-    const metric = container.createSpan({ cls: "codex-kb-dashboard-metric" });
-    metric.createSpan({ cls: "codex-kb-dashboard-metric-label", text: label });
-    metric.createSpan({ cls: "codex-kb-dashboard-metric-value", text: value });
+    const metric = container.createSpan({ cls: "xy-kb-dashboard-metric" });
+    metric.createSpan({ cls: "xy-kb-dashboard-metric-label", text: label });
+    metric.createSpan({ cls: "xy-kb-dashboard-metric-value", text: value });
   }
   addKnowledgeDashboardRulesMetric(container, snapshot) {
     const button = container.createEl("button", {
-      cls: "codex-kb-dashboard-metric codex-kb-dashboard-rule",
+      cls: "xy-kb-dashboard-metric xy-kb-dashboard-rule",
       attr: {
         type: "button",
         title: snapshot.rulesFileExists ? `\u6253\u5F00\u89C4\u5219\u6587\u4EF6\uFF1A${snapshot.rulesFilePath}` : "\u89C4\u5219\u6587\u4EF6\u7F3A\u5931\uFF0C\u70B9\u51FB\u67E5\u770B\u63D0\u793A",
@@ -12464,8 +12467,8 @@ ${providerLabel}`);
       }
     });
     button.toggleClass("is-missing", !snapshot.rulesFileExists);
-    button.createSpan({ cls: "codex-kb-dashboard-metric-label", text: "\u89C4\u5219" });
-    button.createSpan({ cls: "codex-kb-dashboard-metric-value", text: snapshot.rulesFileExists ? snapshot.rulesFilePath : "\u7F3A\u5931" });
+    button.createSpan({ cls: "xy-kb-dashboard-metric-label", text: "\u89C4\u5219" });
+    button.createSpan({ cls: "xy-kb-dashboard-metric-value", text: snapshot.rulesFileExists ? snapshot.rulesFilePath : "\u7F3A\u5931" });
     button.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -12473,9 +12476,9 @@ ${providerLabel}`);
     };
   }
   addKnowledgeDashboardHealthMetric(container, status, label) {
-    const metric = container.createSpan({ cls: `codex-kb-dashboard-metric codex-kb-dashboard-health codex-kb-health-${status}` });
-    metric.createSpan({ cls: "codex-kb-status-dot" });
-    metric.createSpan({ cls: "codex-kb-dashboard-metric-value", text: label });
+    const metric = container.createSpan({ cls: `xy-kb-dashboard-metric xy-kb-dashboard-health xy-kb-health-${status}` });
+    metric.createSpan({ cls: "xy-kb-status-dot" });
+    metric.createSpan({ cls: "xy-kb-dashboard-metric-value", text: label });
   }
   async openKnowledgeDashboardRulesFile(snapshot) {
     if (!snapshot.rulesFileExists) {
@@ -12491,22 +12494,22 @@ ${providerLabel}`);
   }
   renderKnowledgeDashboardHealth(container, snapshot) {
     const section = this.addKnowledgeDashboardSection(container, "\u5065\u5EB7\u6982\u89C8");
-    const overview = section.createDiv({ cls: "codex-kb-dashboard-health-overview" });
+    const overview = section.createDiv({ cls: "xy-kb-dashboard-health-overview" });
     this.addKnowledgeDashboardMeter(
       overview,
       "\u77E5\u8BC6\u5E93\u5065\u5EB7",
       snapshot.health.score,
-      `codex-kb-health-${snapshot.health.status}`,
+      `xy-kb-health-${snapshot.health.status}`,
       snapshot.health.label
     );
     this.addKnowledgeDashboardMeter(
       overview,
       "\u4F53\u68C0\u65B0\u9C9C\u5EA6",
       snapshot.checkFreshness.score,
-      `codex-kb-freshness-${snapshot.checkFreshness.status}`,
+      `xy-kb-freshness-${snapshot.checkFreshness.status}`,
       snapshot.checkFreshness.label
     );
-    const facts = section.createDiv({ cls: "codex-kb-dashboard-facts" });
+    const facts = section.createDiv({ cls: "xy-kb-dashboard-facts" });
     this.addKnowledgeDashboardFact(facts, "\u6700\u8FD1\u4F53\u68C0", snapshot.checkFreshness.lastCheckAt ? formatAbsoluteTime(snapshot.checkFreshness.lastCheckAt) : "\u65E0\u8BB0\u5F55");
     this.addKnowledgeDashboardFact(facts, "\u65B0\u9C9C\u5EA6", snapshot.checkFreshness.daysSinceCheck >= 0 ? `${snapshot.checkFreshness.daysSinceCheck} \u5929\u524D\u786E\u8BA4` : "\u65E0\u8BB0\u5F55");
     this.addKnowledgeDashboardFact(facts, "\u8FDE\u7EED\u4F53\u68C0", snapshot.health.streakDays ? `${snapshot.health.streakDays} \u5929` : "0 \u5929");
@@ -12515,24 +12518,24 @@ ${providerLabel}`);
     const healthReasons = snapshot.health.status === "healthy" ? [] : snapshot.health.reasons;
     const freshnessReasons = snapshot.checkFreshness.status === "fresh" ? [] : snapshot.checkFreshness.reasons;
     if (!healthReasons.length && !freshnessReasons.length) return;
-    const reasons = section.createDiv({ cls: "codex-kb-dashboard-reasons" });
+    const reasons = section.createDiv({ cls: "xy-kb-dashboard-reasons" });
     for (const reason of healthReasons) {
-      reasons.createDiv({ cls: "codex-kb-dashboard-reason", text: reason });
+      reasons.createDiv({ cls: "xy-kb-dashboard-reason", text: reason });
     }
     for (const reason of freshnessReasons) {
-      reasons.createDiv({ cls: "codex-kb-dashboard-reason codex-kb-dashboard-reason-muted", text: reason });
+      reasons.createDiv({ cls: "xy-kb-dashboard-reason xy-kb-dashboard-reason-muted", text: reason });
     }
   }
   addKnowledgeDashboardMeter(container, label, scoreValue, statusClass, statusLabel) {
-    const row = container.createDiv({ cls: "codex-kb-dashboard-meter-row" });
-    row.createDiv({ cls: "codex-kb-dashboard-meter-label", text: label });
-    const score = row.createDiv({ cls: "codex-kb-dashboard-score" });
-    score.createSpan({ cls: "codex-kb-dashboard-score-label", text: `${scoreValue}` });
-    const track = score.createDiv({ cls: "codex-kb-dashboard-score-track" });
-    const fill = track.createDiv({ cls: `codex-kb-dashboard-score-fill ${statusClass}` });
+    const row = container.createDiv({ cls: "xy-kb-dashboard-meter-row" });
+    row.createDiv({ cls: "xy-kb-dashboard-meter-label", text: label });
+    const score = row.createDiv({ cls: "xy-kb-dashboard-score" });
+    score.createSpan({ cls: "xy-kb-dashboard-score-label", text: `${scoreValue}` });
+    const track = score.createDiv({ cls: "xy-kb-dashboard-score-track" });
+    const fill = track.createDiv({ cls: `xy-kb-dashboard-score-fill ${statusClass}` });
     fill.style.width = `${Math.max(0, Math.min(100, scoreValue))}%`;
-    const status = row.createDiv({ cls: `codex-kb-dashboard-health-badge ${statusClass}` });
-    status.createSpan({ cls: "codex-kb-status-dot" });
+    const status = row.createDiv({ cls: `xy-kb-dashboard-health-badge ${statusClass}` });
+    status.createSpan({ cls: "xy-kb-status-dot" });
     status.createSpan({ text: statusLabel });
   }
   renderKnowledgeDashboardWiki(container, snapshot) {
@@ -12549,12 +12552,12 @@ ${providerLabel}`);
     const section = this.addKnowledgeDashboardSection(container, "\u4F53\u68C0\u70ED\u529B\u56FE");
     const year = heatmapYear(snapshot);
     const completedChecks = snapshot.checkHeatmap.filter((day) => day.status === "success" || day.status === "failed").length;
-    section.createDiv({ cls: "codex-kb-heatmap-summary", text: `${year} \u5E74 ${completedChecks} \u6B21\u4F53\u68C0` });
-    const heatmap = section.createDiv({ cls: "codex-kb-dashboard-heatmap" });
-    const grid = heatmap.createDiv({ cls: "codex-kb-heatmap-grid" });
+    section.createDiv({ cls: "xy-kb-heatmap-summary", text: `${year} \u5E74 ${completedChecks} \u6B21\u4F53\u68C0` });
+    const heatmap = section.createDiv({ cls: "xy-kb-dashboard-heatmap" });
+    const grid = heatmap.createDiv({ cls: "xy-kb-heatmap-grid" });
     const yearStart = new Date(year, 0, 1, 12, 0, 0, 0);
     const weekCount = Math.max(1, ...snapshot.checkHeatmap.map((day) => heatmapWeekIndex(day.date, yearStart) + 1));
-    grid.style.setProperty("--codex-kb-heatmap-weeks", String(weekCount));
+    grid.style.setProperty("--xy-kb-heatmap-weeks", String(weekCount));
     const monthStarts = /* @__PURE__ */ new Set();
     for (const day of snapshot.checkHeatmap) {
       if (day.date.endsWith("-01")) monthStarts.add(day.date);
@@ -12562,12 +12565,12 @@ ${providerLabel}`);
     for (const dateKey of monthStarts) {
       const date = parseHeatmapDateKey(dateKey);
       if (!date) continue;
-      const label = grid.createDiv({ cls: "codex-kb-heatmap-month", text: HEATMAP_MONTH_LABELS[date.getMonth()] });
+      const label = grid.createDiv({ cls: "xy-kb-heatmap-month", text: HEATMAP_MONTH_LABELS[date.getMonth()] });
       label.style.gridColumn = `${heatmapWeekIndex(dateKey, yearStart) + 2}`;
       label.style.gridRow = "1";
     }
     for (const [weekday, label] of [[1, "Mon"], [3, "Wed"], [5, "Fri"]]) {
-      const dayLabel = grid.createDiv({ cls: "codex-kb-heatmap-weekday", text: label });
+      const dayLabel = grid.createDiv({ cls: "xy-kb-heatmap-weekday", text: label });
       dayLabel.style.gridColumn = "1";
       dayLabel.style.gridRow = `${weekday + 2}`;
     }
@@ -12575,35 +12578,35 @@ ${providerLabel}`);
       const date = parseHeatmapDateKey(day.date);
       if (!date) continue;
       const cell = grid.createSpan({
-        cls: `codex-kb-heatmap-cell is-${day.status}`,
+        cls: `xy-kb-heatmap-cell is-${day.status}`,
         attr: { title: `${day.date} \xB7 ${knowledgeHeatmapStatusLabel(day.status)}`, "aria-label": `${day.date} ${knowledgeHeatmapStatusLabel(day.status)}` }
       });
       cell.style.gridColumn = `${heatmapWeekIndex(day.date, yearStart) + 2}`;
       cell.style.gridRow = `${date.getDay() + 2}`;
     }
-    const legend = section.createDiv({ cls: "codex-kb-dashboard-legend" });
-    legend.createSpan({ cls: "codex-kb-dashboard-legend-label", text: "Less" });
-    legend.createSpan({ cls: "codex-kb-legend-dot is-none" });
-    legend.createSpan({ cls: "codex-kb-legend-dot is-success is-low" });
-    legend.createSpan({ cls: "codex-kb-legend-dot is-success" });
-    legend.createSpan({ cls: "codex-kb-dashboard-legend-label", text: "More" });
-    const failed = legend.createSpan({ cls: "codex-kb-dashboard-legend-item" });
-    failed.createSpan({ cls: "codex-kb-legend-dot is-failed" });
+    const legend = section.createDiv({ cls: "xy-kb-dashboard-legend" });
+    legend.createSpan({ cls: "xy-kb-dashboard-legend-label", text: "Less" });
+    legend.createSpan({ cls: "xy-kb-legend-dot is-none" });
+    legend.createSpan({ cls: "xy-kb-legend-dot is-success is-low" });
+    legend.createSpan({ cls: "xy-kb-legend-dot is-success" });
+    legend.createSpan({ cls: "xy-kb-dashboard-legend-label", text: "More" });
+    const failed = legend.createSpan({ cls: "xy-kb-dashboard-legend-item" });
+    failed.createSpan({ cls: "xy-kb-legend-dot is-failed" });
     failed.createSpan({ text: "\u5931\u8D25" });
   }
   addKnowledgeDashboardSection(container, title) {
-    const section = container.createDiv({ cls: "codex-kb-dashboard-section" });
-    section.createDiv({ cls: "codex-kb-dashboard-section-title", text: title });
+    const section = container.createDiv({ cls: "xy-kb-dashboard-section" });
+    section.createDiv({ cls: "xy-kb-dashboard-section-title", text: title });
     return section;
   }
   addKnowledgeDashboardFact(container, label, value) {
-    const fact = container.createDiv({ cls: "codex-kb-dashboard-fact" });
-    fact.createSpan({ cls: "codex-kb-dashboard-fact-label", text: label });
-    fact.createSpan({ cls: "codex-kb-dashboard-fact-value", text: value });
+    const fact = container.createDiv({ cls: "xy-kb-dashboard-fact" });
+    fact.createSpan({ cls: "xy-kb-dashboard-fact-label", text: label });
+    fact.createSpan({ cls: "xy-kb-dashboard-fact-value", text: value });
   }
   addKnowledgeDashboardTable(container, title, columns, rows) {
     const section = this.addKnowledgeDashboardSection(container, title);
-    const table = section.createEl("table", { cls: "codex-kb-dashboard-table" });
+    const table = section.createEl("table", { cls: "xy-kb-dashboard-table" });
     const thead = table.createEl("thead");
     const headRow = thead.createEl("tr");
     for (const column of columns) headRow.createEl("th", { text: column });
@@ -12638,15 +12641,15 @@ ${providerLabel}`);
     this.renderMessage(container, row.message);
   }
   renderMessage(container, message) {
-    const wrapper = container.createDiv({ cls: `codex-message codex-message-${message.role}` });
-    wrapper.toggleClass("codex-message-streaming", message.status === "running");
-    wrapper.toggleClass(`codex-message-type-${message.itemType ?? "text"}`, true);
-    if (message.title) wrapper.createDiv({ cls: "codex-message-title", text: message.title });
+    const wrapper = container.createDiv({ cls: `xy-message xy-message-${message.role}` });
+    wrapper.toggleClass("xy-message-streaming", message.status === "running");
+    wrapper.toggleClass(`xy-message-type-${message.itemType ?? "text"}`, true);
+    if (message.title) wrapper.createDiv({ cls: "xy-message-title", text: message.title });
     if (message.attachments?.length) {
-      this.renderUserAttachmentChips(wrapper.createDiv({ cls: "codex-message-attachments" }), message.attachments);
+      this.renderUserAttachmentChips(wrapper.createDiv({ cls: "xy-message-attachments" }), message.attachments);
     }
     if (message.images?.length) {
-      const images = wrapper.createDiv({ cls: "codex-message-images" });
+      const images = wrapper.createDiv({ cls: "xy-message-images" });
       for (const image of message.images) {
         const img = images.createEl("img", { attr: { alt: image.name } });
         img.src = toImageSrc(this.app, image.path);
@@ -12654,7 +12657,7 @@ ${providerLabel}`);
         img.onclick = () => openImageOverlay(img.src);
       }
     }
-    const content = wrapper.createDiv({ cls: "codex-message-content" });
+    const content = wrapper.createDiv({ cls: "xy-message-content" });
     if (message.itemType === "thinking") {
       this.renderThinkingMessage(content, message);
       return;
@@ -12669,32 +12672,32 @@ ${providerLabel}`);
   }
   renderKnowledgeBaseCitations(container, messageId, citations) {
     const stateKey = `kb-citations:${messageId}`;
-    const details = container.createEl("details", { cls: `codex-kb-citations codex-kb-citations-${citations.status}` });
+    const details = container.createEl("details", { cls: `xy-kb-citations xy-kb-citations-${citations.status}` });
     details.open = this.openKnowledgeBaseCitations.get(stateKey) ?? false;
     details.ontoggle = () => {
       this.openKnowledgeBaseCitations.set(stateKey, details.open);
       this.scheduleMeasureVirtualRows();
     };
-    const summary = details.createEl("summary", { cls: "codex-kb-citations-summary" });
-    summary.createSpan({ cls: "codex-kb-citations-title", text: "\u672C\u6B21\u6765\u6E90" });
-    const buckets = summary.createSpan({ cls: "codex-kb-citation-buckets" });
+    const summary = details.createEl("summary", { cls: "xy-kb-citations-summary" });
+    summary.createSpan({ cls: "xy-kb-citations-title", text: "\u672C\u6B21\u6765\u6E90" });
+    const buckets = summary.createSpan({ cls: "xy-kb-citation-buckets" });
     for (const bucket of ["wiki", "journal", "outputs"]) {
-      buckets.createSpan({ cls: `codex-kb-source-count codex-kb-source-${bucket}`, text: `${kbBucketLabel(bucket)} ${citations.counts[bucket] ?? 0}` });
+      buckets.createSpan({ cls: `xy-kb-source-count xy-kb-source-${bucket}`, text: `${kbBucketLabel(bucket)} ${citations.counts[bucket] ?? 0}` });
     }
-    summary.createSpan({ cls: `codex-kb-evidence-status codex-kb-evidence-${citations.status}`, text: kbEvidenceStatusLabel(citations.status) });
-    const body = details.createDiv({ cls: "codex-kb-citations-body" });
+    summary.createSpan({ cls: `xy-kb-evidence-status xy-kb-evidence-${citations.status}`, text: kbEvidenceStatusLabel(citations.status) });
+    const body = details.createDiv({ cls: "xy-kb-citations-body" });
     if (!citations.citations.length) {
-      body.createDiv({ cls: "codex-kb-no-evidence", text: "\u6CA1\u6709\u547D\u4E2D\u6587\u4EF6\uFF0C\u4E5F\u6CA1\u6709\u5F15\u7528\u7247\u6BB5\uFF1B\u4E0D\u4F1A\u663E\u793A\u4F2A\u6765\u6E90\u3002" });
+      body.createDiv({ cls: "xy-kb-no-evidence", text: "\u6CA1\u6709\u547D\u4E2D\u6587\u4EF6\uFF0C\u4E5F\u6CA1\u6709\u5F15\u7528\u7247\u6BB5\uFF1B\u4E0D\u4F1A\u663E\u793A\u4F2A\u6765\u6E90\u3002" });
       return;
     }
     for (const citation of citations.citations) this.renderKnowledgeBaseCitationItem(body, citation);
   }
   renderKnowledgeBaseCitationItem(container, citation) {
-    const item = container.createDiv({ cls: `codex-kb-citation-item codex-kb-citation-${citation.bucket}` });
-    const header = item.createDiv({ cls: "codex-kb-citation-header" });
-    header.createSpan({ cls: `codex-kb-citation-badge codex-kb-source-${citation.bucket}`, text: kbBucketLabel(citation.bucket) });
+    const item = container.createDiv({ cls: `xy-kb-citation-item xy-kb-citation-${citation.bucket}` });
+    const header = item.createDiv({ cls: "xy-kb-citation-header" });
+    header.createSpan({ cls: `xy-kb-citation-badge xy-kb-source-${citation.bucket}`, text: kbBucketLabel(citation.bucket) });
     const title = header.createEl("button", {
-      cls: "codex-kb-citation-title",
+      cls: "xy-kb-citation-title",
       text: citation.title || citation.path,
       attr: {
         type: "button",
@@ -12706,9 +12709,9 @@ ${providerLabel}`);
       event.stopPropagation();
       void this.openKnowledgeBaseCitation(citation);
     };
-    header.createSpan({ cls: `codex-kb-citation-relevance codex-kb-evidence-${citation.relevance}`, text: citation.relevance === "strong" ? "\u5F3A\u8BC1\u636E" : "\u5F31\u76F8\u5173" });
+    header.createSpan({ cls: `xy-kb-citation-relevance xy-kb-evidence-${citation.relevance}`, text: citation.relevance === "strong" ? "\u5F3A\u8BC1\u636E" : "\u5F31\u76F8\u5173" });
     const open = header.createEl("button", {
-      cls: "codex-kb-citation-open",
+      cls: "xy-kb-citation-open",
       text: "\u6253\u5F00",
       attr: {
         type: "button",
@@ -12720,12 +12723,12 @@ ${providerLabel}`);
       event.stopPropagation();
       void this.openKnowledgeBaseCitation(citation);
     };
-    item.createDiv({ cls: "codex-kb-citation-path", text: citation.path });
-    const quote = item.createDiv({ cls: "codex-kb-citation-quote" });
+    item.createDiv({ cls: "xy-kb-citation-path", text: citation.path });
+    const quote = item.createDiv({ cls: "xy-kb-citation-quote" });
     for (const line of citation.excerptLines.length ? citation.excerptLines : ["\u65E0\u53EF\u7528\u5F15\u7528\u7247\u6BB5"]) {
-      quote.createDiv({ cls: "codex-kb-citation-line", text: line });
+      quote.createDiv({ cls: "xy-kb-citation-line", text: line });
     }
-    item.createDiv({ cls: "codex-kb-citation-reason", text: `\u4E3A\u4EC0\u4E48\u76F8\u5173\uFF1A${citation.reason}` });
+    item.createDiv({ cls: "xy-kb-citation-reason", text: `\u4E3A\u4EC0\u4E48\u76F8\u5173\uFF1A${citation.reason}` });
   }
   async openKnowledgeBaseCitation(citation) {
     const normalized = (0, import_obsidian4.normalizePath)(citation.path);
@@ -12740,13 +12743,13 @@ ${providerLabel}`);
   }
   renderProcessGroup(container, messages) {
     const groupId = processGroupId(messages);
-    const wrapper = container.createDiv({ cls: "codex-message codex-message-tool codex-message-type-processGroup" });
-    const details = wrapper.createEl("details", { cls: "codex-process-group" });
+    const wrapper = container.createDiv({ cls: "xy-message xy-message-tool xy-message-type-processGroup" });
+    const details = wrapper.createEl("details", { cls: "xy-process-group" });
     details.open = this.openProcessGroups.get(groupId) ?? false;
     let body = null;
     const renderBody = () => {
       if (body) return;
-      body = details.createDiv({ cls: "codex-process-group-body" });
+      body = details.createDiv({ cls: "xy-process-group-body" });
       for (const message of messages) this.renderProcessMessage(body, message, true);
     };
     details.ontoggle = () => {
@@ -12754,29 +12757,29 @@ ${providerLabel}`);
       if (details.open) renderBody();
       this.scheduleMeasureVirtualRows();
     };
-    const summary = details.createEl("summary", { cls: "codex-process-group-summary" });
-    const icon = summary.createSpan({ cls: "codex-process-group-icon" });
+    const summary = details.createEl("summary", { cls: "xy-process-group-summary" });
+    const icon = summary.createSpan({ cls: "xy-process-group-icon" });
     (0, import_obsidian4.setIcon)(icon, "list-tree");
-    const main = summary.createDiv({ cls: "codex-process-group-main" });
-    main.createSpan({ cls: "codex-process-group-title", text: processGroupTitle(messages) });
-    main.createSpan({ cls: "codex-process-group-detail", text: processGroupDetail(messages) });
+    const main = summary.createDiv({ cls: "xy-process-group-main" });
+    main.createSpan({ cls: "xy-process-group-title", text: processGroupTitle(messages) });
+    main.createSpan({ cls: "xy-process-group-detail", text: processGroupDetail(messages) });
     const status = processGroupStatus(messages);
-    summary.createSpan({ cls: "codex-structured-status", text: status });
+    summary.createSpan({ cls: "xy-structured-status", text: status });
     if (details.open) renderBody();
   }
   renderUserAttachmentChips(container, attachments) {
     for (const attachment of attachments) {
       const chip = container.createEl("button", {
-        cls: `codex-message-attachment-chip codex-message-attachment-${attachment.type}`,
+        cls: `xy-message-attachment-chip xy-message-attachment-${attachment.type}`,
         attr: {
           type: "button",
           title: attachment.path,
           "aria-label": `\u6253\u5F00\u9644\u4EF6 ${attachment.name}`
         }
       });
-      const icon = chip.createSpan({ cls: "codex-message-attachment-icon" });
+      const icon = chip.createSpan({ cls: "xy-message-attachment-icon" });
       (0, import_obsidian4.setIcon)(icon, attachment.type === "image" ? "image" : "file-text");
-      chip.createSpan({ cls: "codex-message-attachment-name", text: attachment.name });
+      chip.createSpan({ cls: "xy-message-attachment-name", text: attachment.name });
       chip.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -12793,28 +12796,28 @@ ${providerLabel}`);
     await this.openProcessFile(ref);
   }
   renderThinkingMessage(container, message) {
-    const shell = container.createDiv({ cls: "codex-thinking-shell" });
+    const shell = container.createDiv({ cls: "xy-thinking-shell" });
     if (message.status === "running") {
-      const row = shell.createDiv({ cls: "codex-thinking-live" });
-      row.createSpan({ cls: "codex-thinking-dot" });
+      const row = shell.createDiv({ cls: "xy-thinking-live" });
+      row.createSpan({ cls: "xy-thinking-dot" });
       row.createSpan({ text: message.text || "\u6B63\u5728\u751F\u6210\u56DE\u590D..." });
       return;
     }
-    shell.createEl("em", { cls: "codex-response-footer", text: message.text || "\u601D\u8003\u5B8C\u6210" });
+    shell.createEl("em", { cls: "xy-response-footer", text: message.text || "\u601D\u8003\u5B8C\u6210" });
   }
   renderProcessMessage(container, message, nested = false) {
-    const details = container.createEl("details", { cls: `codex-structured codex-process codex-process-${message.itemType ?? "item"}` });
+    const details = container.createEl("details", { cls: `xy-structured xy-process xy-process-${message.itemType ?? "item"}` });
     details.toggleClass("is-running", message.status === "running");
     details.toggleClass("is-completed", message.status === "completed");
     details.toggleClass("is-error", message.status === "error" || message.status === "failed");
     details.toggleClass("is-nested", nested);
-    if (message.processKind) details.toggleClass(`codex-process-kind-${message.processKind}`, true);
+    if (message.processKind) details.toggleClass(`xy-process-kind-${message.processKind}`, true);
     const defaultOpen = !nested && (message.itemType === "reasoning" || message.itemType === "plan" || message.status === "error" || message.status === "failed");
     details.open = this.openProcessItems.get(message.id) ?? defaultOpen;
     let body = null;
     const renderBody = () => {
       if (body) return;
-      body = details.createDiv({ cls: "codex-structured-body codex-process-body" });
+      body = details.createDiv({ cls: "xy-structured-body xy-process-body" });
       this.renderProcessBody(body, message);
     };
     details.ontoggle = () => {
@@ -12822,19 +12825,19 @@ ${providerLabel}`);
       if (details.open) renderBody();
       this.scheduleMeasureVirtualRows();
     };
-    const summary = details.createEl("summary", { cls: "codex-process-summary" });
-    const icon = summary.createSpan({ cls: "codex-structured-icon codex-process-icon" });
+    const summary = details.createEl("summary", { cls: "xy-process-summary" });
+    const icon = summary.createSpan({ cls: "xy-structured-icon xy-process-icon" });
     (0, import_obsidian4.setIcon)(icon, iconForProcessMessage(message));
-    const main = summary.createDiv({ cls: "codex-process-main" });
+    const main = summary.createDiv({ cls: "xy-process-main" });
     if (message.itemType === "fileChange" && message.diffSummary?.files.length) {
       this.renderProcessEditSummary(main, message);
     } else {
-      main.createSpan({ cls: "codex-structured-title codex-process-title", text: titleForItemType(message) });
+      main.createSpan({ cls: "xy-structured-title xy-process-title", text: titleForItemType(message) });
       if (message.itemType === "fileChange" && message.diffSummary) this.renderDiffStats(main, message.diffSummary);
-      if (message.details) main.createDiv({ cls: "codex-process-detail", text: message.details });
-      if (message.itemType === "fileChange" && message.files?.length) this.renderProcessFileChips(main.createDiv({ cls: "codex-process-files" }), message.files);
+      if (message.details) main.createDiv({ cls: "xy-process-detail", text: message.details });
+      if (message.itemType === "fileChange" && message.files?.length) this.renderProcessFileChips(main.createDiv({ cls: "xy-process-files" }), message.files);
     }
-    if (message.status) summary.createSpan({ cls: "codex-structured-status", text: labelForStatus(message.status) });
+    if (message.status) summary.createSpan({ cls: "xy-structured-status", text: labelForStatus(message.status) });
     if (details.open) renderBody();
   }
   renderProcessBody(body, message) {
@@ -12848,7 +12851,7 @@ ${providerLabel}`);
       return;
     }
     const rawLike = message.itemType === "commandExecution" || message.itemType === "fileChange" || message.itemType === "mcpToolCall" || message.itemType === "dynamicToolCall" || message.itemType === "collabAgentToolCall";
-    if (rawLike) body.createDiv({ cls: "codex-process-raw-title", text: this.rawMetaLabel(message) });
+    if (rawLike) body.createDiv({ cls: "xy-process-raw-title", text: this.rawMetaLabel(message) });
     if (message.rawRef) {
       this.renderDeferredRawText(body, message, fallback);
       return;
@@ -12872,10 +12875,10 @@ ${providerLabel}`);
       this.renderDiffFiles(body, files, message.files ?? []);
     };
     if (message.rawRef) {
-      body.createDiv({ cls: "codex-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u6587\u4EF6\u6539\u52A8..." });
+      body.createDiv({ cls: "xy-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u6587\u4EF6\u6539\u52A8..." });
       void this.loadRawText(message).then((text) => renderDiff(text)).catch((error) => {
         body.empty();
-        body.createDiv({ cls: "codex-process-raw-loading", text: `\u6587\u4EF6\u6539\u52A8\u52A0\u8F7D\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}` });
+        body.createDiv({ cls: "xy-process-raw-loading", text: `\u6587\u4EF6\u6539\u52A8\u52A0\u8F7D\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}` });
         this.renderPlainTextBlock(body, displayTextForMessage(message) || fallback);
       });
       return;
@@ -12885,18 +12888,18 @@ ${providerLabel}`);
   renderCommandExecutionBody(body, message, fallback) {
     const renderShell = (text) => {
       body.empty();
-      const shell = body.createDiv({ cls: "codex-shell-block" });
-      shell.createDiv({ cls: "codex-shell-label", text: "Shell" });
-      shell.createEl("pre", { cls: "codex-shell-output", text: shellTranscript(text || fallback) });
+      const shell = body.createDiv({ cls: "xy-shell-block" });
+      shell.createDiv({ cls: "xy-shell-label", text: "Shell" });
+      shell.createEl("pre", { cls: "xy-shell-output", text: shellTranscript(text || fallback) });
     };
     if (message.rawRef) {
-      body.createDiv({ cls: "codex-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u547D\u4EE4\u8F93\u51FA..." });
+      body.createDiv({ cls: "xy-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u547D\u4EE4\u8F93\u51FA..." });
       void this.loadRawText(message).then((text) => {
         renderShell(text);
         this.scheduleMeasureVirtualRows();
       }).catch((error) => {
         body.empty();
-        body.createDiv({ cls: "codex-process-raw-loading", text: `\u547D\u4EE4\u8F93\u51FA\u52A0\u8F7D\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}` });
+        body.createDiv({ cls: "xy-process-raw-loading", text: `\u547D\u4EE4\u8F93\u51FA\u52A0\u8F7D\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}` });
         renderShell(displayTextForMessage(message) || fallback);
         this.scheduleMeasureVirtualRows();
       });
@@ -12905,23 +12908,23 @@ ${providerLabel}`);
     renderShell(displayTextForMessage(message) || fallback);
   }
   renderDiffOverview(container, summary) {
-    const row = container.createDiv({ cls: "codex-diff-overview" });
-    row.createSpan({ cls: "codex-diff-overview-title", text: diffSummaryLabel(summary) });
+    const row = container.createDiv({ cls: "xy-diff-overview" });
+    row.createSpan({ cls: "xy-diff-overview-title", text: diffSummaryLabel(summary) });
     this.renderDiffStats(row, summary);
   }
   renderDiffStats(container, summary) {
-    const stats = container.createSpan({ cls: "codex-diff-stats" });
-    stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-add", text: `+${summary.added}` });
-    stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-remove", text: `-${summary.removed}` });
+    const stats = container.createSpan({ cls: "xy-diff-stats" });
+    stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-add", text: `+${summary.added}` });
+    stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-remove", text: `-${summary.removed}` });
   }
   renderDiffFiles(container, files, refs) {
-    const list = container.createDiv({ cls: "codex-diff-files" });
+    const list = container.createDiv({ cls: "xy-diff-files" });
     if (files.length === 1) {
       this.renderDiffFileBody(list, files[0]);
       return;
     }
     files.forEach((file, index) => {
-      const details = list.createEl("details", { cls: "codex-diff-file" });
+      const details = list.createEl("details", { cls: "xy-diff-file" });
       details.open = files.length === 1 || index === 0;
       let rendered = false;
       const renderRows = () => {
@@ -12932,50 +12935,50 @@ ${providerLabel}`);
       details.ontoggle = () => {
         if (details.open) renderRows();
       };
-      const summary = details.createEl("summary", { cls: "codex-diff-file-summary" });
-      const main = summary.createSpan({ cls: "codex-diff-file-main" });
+      const summary = details.createEl("summary", { cls: "xy-diff-file-summary" });
+      const main = summary.createSpan({ cls: "xy-diff-file-main" });
       const ref = findProcessFileRef(refs, file.path);
       if (ref) {
-        this.renderProcessFileTextLink(main, ref, file.path, "codex-diff-file-path");
+        this.renderProcessFileTextLink(main, ref, file.path, "xy-diff-file-path");
       } else {
-        main.createSpan({ cls: "codex-diff-file-path", text: file.path });
+        main.createSpan({ cls: "xy-diff-file-path", text: file.path });
       }
-      if (file.previousPath) main.createSpan({ cls: "codex-diff-file-previous", text: `\u539F\u8DEF\u5F84 ${file.previousPath}` });
-      summary.createSpan({ cls: "codex-diff-file-kind", text: labelForDiffKind(file.kind) });
-      const stats = summary.createSpan({ cls: "codex-diff-file-stats" });
-      stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-add", text: `+${file.added}` });
-      stats.createSpan({ cls: "codex-diff-stat codex-diff-stat-remove", text: `-${file.removed}` });
+      if (file.previousPath) main.createSpan({ cls: "xy-diff-file-previous", text: `\u539F\u8DEF\u5F84 ${file.previousPath}` });
+      summary.createSpan({ cls: "xy-diff-file-kind", text: labelForDiffKind(file.kind) });
+      const stats = summary.createSpan({ cls: "xy-diff-file-stats" });
+      stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-add", text: `+${file.added}` });
+      stats.createSpan({ cls: "xy-diff-stat xy-diff-stat-remove", text: `-${file.removed}` });
       if (details.open) renderRows();
     });
   }
   renderDiffFileBody(container, file) {
-    const body = container.createDiv({ cls: "codex-diff-file-body" });
+    const body = container.createDiv({ cls: "xy-diff-file-body" });
     if (!file.lines.length) {
-      body.createDiv({ cls: "codex-diff-empty", text: "\u6CA1\u6709\u53EF\u5C55\u793A\u7684 diff \u5185\u5BB9" });
+      body.createDiv({ cls: "xy-diff-empty", text: "\u6CA1\u6709\u53EF\u5C55\u793A\u7684 diff \u5185\u5BB9" });
       return;
     }
     for (const line of file.lines) {
-      const row = body.createDiv({ cls: `codex-diff-line codex-diff-line-${line.type}` });
-      row.createSpan({ cls: "codex-diff-line-no codex-diff-line-old", text: line.oldLine === null ? "" : String(line.oldLine) });
-      row.createSpan({ cls: "codex-diff-line-no codex-diff-line-new", text: line.newLine === null ? "" : String(line.newLine) });
-      row.createSpan({ cls: "codex-diff-marker", text: line.marker });
-      row.createSpan({ cls: "codex-diff-content", text: line.text || " " });
+      const row = body.createDiv({ cls: `xy-diff-line xy-diff-line-${line.type}` });
+      row.createSpan({ cls: "xy-diff-line-no xy-diff-line-old", text: line.oldLine === null ? "" : String(line.oldLine) });
+      row.createSpan({ cls: "xy-diff-line-no xy-diff-line-new", text: line.newLine === null ? "" : String(line.newLine) });
+      row.createSpan({ cls: "xy-diff-marker", text: line.marker });
+      row.createSpan({ cls: "xy-diff-content", text: line.text || " " });
     }
   }
   renderProcessEditSummary(container, message) {
-    const list = container.createDiv({ cls: "codex-process-edit-list" });
+    const list = container.createDiv({ cls: "xy-process-edit-list" });
     for (const file of message.diffSummary?.files ?? []) {
-      const row = list.createDiv({ cls: "codex-process-edit-row" });
-      row.createSpan({ cls: "codex-process-edit-prefix", text: "\u5DF2\u7F16\u8F91 " });
+      const row = list.createDiv({ cls: "xy-process-edit-row" });
+      row.createSpan({ cls: "xy-process-edit-prefix", text: "\u5DF2\u7F16\u8F91 " });
       const ref = findProcessFileRef(message.files ?? [], file.path) ?? normalizeProcessFileRef(file.path, this.plugin.getVaultPath());
-      this.renderProcessFileTextLink(row, ref, basename3(file.path), "codex-process-edit-file");
-      row.createSpan({ cls: "codex-diff-stat codex-diff-stat-add", text: ` +${file.added}` });
-      row.createSpan({ cls: "codex-diff-stat codex-diff-stat-remove", text: ` -${file.removed}` });
+      this.renderProcessFileTextLink(row, ref, basename3(file.path), "xy-process-edit-file");
+      row.createSpan({ cls: "xy-diff-stat xy-diff-stat-add", text: ` +${file.added}` });
+      row.createSpan({ cls: "xy-diff-stat xy-diff-stat-remove", text: ` -${file.removed}` });
     }
   }
   renderProcessFileTextLink(container, file, label, extraClass = "") {
     const link = container.createEl("span", {
-      cls: `codex-process-file-link codex-process-file-link-${file.kind} ${extraClass}`.trim(),
+      cls: `xy-process-file-link xy-process-file-link-${file.kind} ${extraClass}`.trim(),
       text: label,
       attr: {
         role: "button",
@@ -12999,8 +13002,8 @@ ${providerLabel}`);
     return link;
   }
   renderDeferredRawText(container, message, fallback) {
-    const status = container.createDiv({ cls: "codex-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u5168\u6587..." });
-    const pre = container.createEl("pre", { cls: "codex-process-fulltext" });
+    const status = container.createDiv({ cls: "xy-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u5168\u6587..." });
+    const pre = container.createEl("pre", { cls: "xy-process-fulltext" });
     pre.setText(displayTextForMessage(message) || fallback);
     void this.loadRawText(message).then((text) => {
       status.setText(this.rawMetaLabel(message, text));
@@ -13012,15 +13015,15 @@ ${providerLabel}`);
     });
   }
   renderRawMessageExpander(container, message) {
-    const details = container.createEl("details", { cls: "codex-raw-message-details" });
+    const details = container.createEl("details", { cls: "xy-raw-message-details" });
     details.createEl("summary", { text: this.rawMetaLabel(message) });
     let loaded = false;
     details.ontoggle = () => {
       if (!details.open || loaded) return;
       loaded = true;
-      const body = details.createDiv({ cls: "codex-raw-message-body" });
-      body.createDiv({ cls: "codex-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u5168\u6587..." });
-      const pre = body.createEl("pre", { cls: "codex-process-fulltext" });
+      const body = details.createDiv({ cls: "xy-raw-message-body" });
+      body.createDiv({ cls: "xy-process-raw-loading", text: "\u6B63\u5728\u52A0\u8F7D\u5168\u6587..." });
+      const pre = body.createEl("pre", { cls: "xy-process-fulltext" });
       this.scheduleMeasureVirtualRows();
       void this.loadRawText(message).then((text) => {
         body.empty();
@@ -13033,7 +13036,7 @@ ${providerLabel}`);
     };
   }
   renderPlainTextBlock(container, text) {
-    const pre = container.createEl("pre", { cls: "codex-process-fulltext" });
+    const pre = container.createEl("pre", { cls: "xy-process-fulltext" });
     pre.setText(text);
   }
   async loadRawText(message) {
@@ -13061,7 +13064,7 @@ ${providerLabel}`);
   renderProcessFileChips(container, files) {
     for (const file of files) {
       const chip = container.createEl("button", {
-        cls: `codex-process-file-chip codex-process-file-${file.kind}`,
+        cls: `xy-process-file-chip xy-process-file-${file.kind}`,
         attr: {
           type: "button",
           title: file.openable ? file.displayPath : `${file.displayPath}\uFF08\u65E0\u6CD5\u6253\u5F00\uFF09`,
@@ -13069,9 +13072,9 @@ ${providerLabel}`);
         }
       });
       chip.toggleClass("is-disabled", !file.openable);
-      const icon = chip.createSpan({ cls: "codex-process-file-icon" });
+      const icon = chip.createSpan({ cls: "xy-process-file-icon" });
       (0, import_obsidian4.setIcon)(icon, file.kind === "external" ? "folder-open" : "file-text");
-      chip.createSpan({ cls: "codex-process-file-name", text: file.name });
+      chip.createSpan({ cls: "xy-process-file-name", text: file.name });
       chip.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -13105,9 +13108,9 @@ ${providerLabel}`);
     const knowledgeSession = this.isKnowledgeBaseSession(session);
     const knowledgeManager = this.plugin.getKnowledgeBaseManager();
     const knowledgeTaskRunning = knowledgeSession && Boolean(knowledgeManager?.isRunning);
-    const row = this.toolbarEl.createDiv({ cls: "codex-composer-row" });
-    const left = row.createDiv({ cls: "codex-composer-left" });
-    const right = row.createDiv({ cls: "codex-composer-right" });
+    const row = this.toolbarEl.createDiv({ cls: "xy-composer-row" });
+    const left = row.createDiv({ cls: "xy-composer-left" });
+    const right = row.createDiv({ cls: "xy-composer-right" });
     const addButton = this.createComposerIconButton(left, "plus", "\u6DFB\u52A0\u5185\u5BB9");
     addButton.onclick = (event) => this.openAddMenu(event);
     if (knowledgeSession) {
@@ -13125,23 +13128,11 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       });
       const fileButton = this.createComposerIconButton(left, "file-plus", "\u6587\u4EF6\u6536\u85CF");
       fileButton.onclick = () => this.pickKnowledgeBaseFiles();
-      if (this.resolvedKnowledgeBackend() === "codex-cli") {
-        const modelButton = right.createEl("button", {
-          cls: "codex-composer-model-button",
-          attr: { type: "button", "aria-label": "\u77E5\u8BC6\u5E93\u6A21\u578B\u548C\u601D\u8003\u5F3A\u5EA6", title: this.currentKnowledgeComposerSummaryTitle() }
-        });
-        const modelIcon = modelButton.createSpan({ cls: "codex-composer-model-icon" });
-        (0, import_obsidian4.setIcon)(modelIcon, "zap");
-        modelButton.createSpan({ cls: "codex-composer-model-text", text: this.currentComposerSummary() });
-        const modelChevron = modelButton.createSpan({ cls: "codex-composer-chevron" });
-        (0, import_obsidian4.setIcon)(modelChevron, "chevron-down");
-        modelButton.onclick = (event) => this.openKnowledgeModelMenu(event);
-      }
-      const kbChip = right.createEl("button", { cls: "codex-composer-model-button codex-kb-channel-chip", attr: { type: "button", title: "\u77E5\u8BC6\u5E93\u5E38\u7528\u547D\u4EE4" } });
-      const kbIcon = kbChip.createSpan({ cls: "codex-composer-model-icon" });
+      const kbChip = right.createEl("button", { cls: "xy-composer-model-button xy-kb-channel-chip", attr: { type: "button", title: "\u77E5\u8BC6\u5E93\u5E38\u7528\u547D\u4EE4" } });
+      const kbIcon = kbChip.createSpan({ cls: "xy-composer-model-icon" });
       (0, import_obsidian4.setIcon)(kbIcon, "library");
-      kbChip.createSpan({ cls: "codex-composer-model-text", text: knowledgeTaskRunning ? "\u77E5\u8BC6\u5E93\u8FD0\u884C\u4E2D" : "\u77E5\u8BC6\u5E93\u547D\u4EE4" });
-      const chevron = kbChip.createSpan({ cls: "codex-composer-chevron" });
+      kbChip.createSpan({ cls: "xy-composer-model-text", text: knowledgeTaskRunning ? "\u77E5\u8BC6\u5E93\u8FD0\u884C\u4E2D" : "\u77E5\u8BC6\u5E93\u547D\u4EE4" });
+      const chevron = kbChip.createSpan({ cls: "xy-composer-chevron" });
       (0, import_obsidian4.setIcon)(chevron, "chevron-down");
       kbChip.onclick = (event) => this.openKnowledgeCommandMenu(event);
     } else {
@@ -13149,20 +13140,20 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
         this.selectedPermission = value;
         this.persistComposerDefaults();
         this.renderToolbar();
-      }, "\u6743\u9650", "codex-permission-control");
+      }, "\u6743\u9650", "xy-permission-control");
       this.addWorkspaceButton(left, session);
-      this.contextEl = right.createDiv({ cls: "codex-context-meter", attr: { title: "\u4E0A\u4E0B\u6587\u5BB9\u91CF" } });
-      this.contextRingEl = this.contextEl.createSpan({ cls: "codex-context-ring", attr: { "aria-hidden": "true" } });
-      this.contextRingEl.createSpan({ cls: "codex-context-ring-hole" });
-      this.contextValueEl = this.contextEl.createSpan({ cls: "codex-context-value", text: "--" });
+      this.contextEl = right.createDiv({ cls: "xy-context-meter", attr: { title: "\u4E0A\u4E0B\u6587\u5BB9\u91CF" } });
+      this.contextRingEl = this.contextEl.createSpan({ cls: "xy-context-ring", attr: { "aria-hidden": "true" } });
+      this.contextRingEl.createSpan({ cls: "xy-context-ring-hole" });
+      this.contextValueEl = this.contextEl.createSpan({ cls: "xy-context-value", text: "--" });
       const modelButton = right.createEl("button", {
-        cls: "codex-composer-model-button",
+        cls: "xy-composer-model-button",
         attr: { type: "button", "aria-label": "\u6A21\u578B\u548C\u8FD0\u884C\u53C2\u6570", title: this.currentComposerSummaryTitle() }
       });
-      const modelIcon = modelButton.createSpan({ cls: "codex-composer-model-icon" });
+      const modelIcon = modelButton.createSpan({ cls: "xy-composer-model-icon" });
       (0, import_obsidian4.setIcon)(modelIcon, "zap");
-      modelButton.createSpan({ cls: "codex-composer-model-text", text: this.currentComposerSummary() });
-      const chevron = modelButton.createSpan({ cls: "codex-composer-chevron" });
+      modelButton.createSpan({ cls: "xy-composer-model-text", text: this.currentComposerSummary() });
+      const chevron = modelButton.createSpan({ cls: "xy-composer-chevron" });
       (0, import_obsidian4.setIcon)(chevron, "chevron-down");
       modelButton.onclick = (event) => this.openModelMenu(event);
       const micButton = this.createComposerIconButton(right, "mic", "\u8BED\u97F3\u8F93\u5165");
@@ -13174,7 +13165,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     };
     const busy = composerIsBusy(composerState);
     const sendButton = row.createEl("button", {
-      cls: "codex-send-button codex-composer-send-button",
+      cls: "xy-send-button xy-composer-send-button",
       attr: { type: "button", "aria-label": busy ? "\u505C\u6B62" : "\u53D1\u9001", title: busy ? "\u505C\u6B62" : "\u53D1\u9001" }
     });
     (0, import_obsidian4.setIcon)(sendButton, busy ? "square" : "send-horizontal");
@@ -13188,18 +13179,18 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
   }
   createComposerIconButton(container, iconName, title) {
     const button = container.createEl("button", {
-      cls: "codex-composer-icon-button",
+      cls: "xy-composer-icon-button",
       attr: { type: "button", "aria-label": title, title }
     });
     (0, import_obsidian4.setIcon)(button, iconName);
     return button;
   }
   addComposerSelect(container, iconName, values, selected, onChange, label, extraClass = "") {
-    const control = container.createDiv({ cls: `codex-composer-select ${extraClass}`.trim(), attr: { title: label } });
+    const control = container.createDiv({ cls: `xy-composer-select ${extraClass}`.trim(), attr: { title: label } });
     control.toggleClass("is-danger", selected === "danger-full-access");
-    const icon = control.createSpan({ cls: "codex-composer-select-icon" });
+    const icon = control.createSpan({ cls: "xy-composer-select-icon" });
     (0, import_obsidian4.setIcon)(icon, iconName);
-    const select = control.createEl("select", { cls: "codex-select codex-composer-native-select", attr: { "aria-label": label, title: label } });
+    const select = control.createEl("select", { cls: "xy-select xy-composer-native-select", attr: { "aria-label": label, title: label } });
     for (const value of values) select.createEl("option", { text: labelFor(value), value });
     select.value = selected;
     select.onchange = () => onChange(select.value);
@@ -13209,15 +13200,15 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const valid = workspacePath ? workspaceDirectoryExists(workspacePath) : false;
     const title = workspacePath ? `\u5DE5\u4F5C\u533A\uFF1A${workspacePath}${valid ? "" : "\n\u6587\u4EF6\u5939\u4E0D\u5B58\u5728\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9"}` : "\u9009\u62E9\u6587\u4EF6\u5939\u4F5C\u4E3A\u672C\u4F1A\u8BDD\u5DE5\u4F5C\u533A";
     const button = container.createEl("button", {
-      cls: "codex-composer-model-button codex-workspace-button",
+      cls: "xy-composer-model-button xy-workspace-button",
       attr: { type: "button", title, "aria-label": "\u9009\u62E9\u5DE5\u4F5C\u533A" }
     });
     button.toggleClass("is-missing", !workspacePath);
     button.toggleClass("is-invalid", Boolean(workspacePath && !valid));
-    const icon = button.createSpan({ cls: "codex-composer-model-icon" });
+    const icon = button.createSpan({ cls: "xy-composer-model-icon" });
     (0, import_obsidian4.setIcon)(icon, workspacePath ? "folder-open" : "folder-plus");
-    button.createSpan({ cls: "codex-composer-model-text", text: workspacePath ? workspaceDisplayName(workspacePath) : "\u9009\u5DE5\u4F5C\u533A" });
-    const chevron = button.createSpan({ cls: "codex-composer-chevron" });
+    button.createSpan({ cls: "xy-composer-model-text", text: workspacePath ? workspaceDisplayName(workspacePath) : "\u9009\u5DE5\u4F5C\u533A" });
+    const chevron = button.createSpan({ cls: "xy-composer-chevron" });
     (0, import_obsidian4.setIcon)(chevron, "chevron-down");
     button.onclick = (event) => this.openWorkspaceMenu(event, session);
   }
@@ -13328,7 +13319,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     if (!this.isKnowledgeBaseSession(session)) return;
     await this.plugin.saveSettings(true);
     const index = await this.plugin.readKnowledgeBaseHistoryIndex().catch((error) => {
-      console.error("Codex knowledge history read failed", error);
+      console.error("OpenCode knowledge history read failed", error);
       return null;
     });
     const historySession = index?.sessions.find((item) => item.sessionId === session.id);
@@ -13401,7 +13392,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const menu = new import_obsidian4.Menu();
     const providerModels = this.activeProviderModels();
     const effectiveModel = this.effectiveModel();
-    const models = providerModels.length ? ensureModelChoices([], ...providerModels) : ensureModelChoices(this.plugin.lastStatus?.models ?? [], this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
+    const models = providerModels.length ? ensureModelChoices([], ...providerModels) : ensureModelChoices((this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName })), this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
     menu.addItem((item) => item.setTitle("\u77E5\u8BC6\u5E93\u6A21\u578B").setIsLabel(true));
     if (!providerModels.length) {
       menu.addItem(
@@ -13444,7 +13435,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const menu = new import_obsidian4.Menu();
     const providerModels = this.activeProviderModels();
     const effectiveModel = this.effectiveModel();
-    const models = providerModels.length ? ensureModelChoices([], ...providerModels) : ensureModelChoices(this.plugin.lastStatus?.models ?? [], this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
+    const models = providerModels.length ? ensureModelChoices([], ...providerModels) : ensureModelChoices((this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName })), this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
     menu.addItem((item) => item.setTitle("\u6A21\u578B").setIsLabel(true));
     if (!providerModels.length) {
       menu.addItem(
@@ -13523,7 +13514,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     this.plugin.settings.defaultPermission = this.selectedPermission;
     this.plugin.settings.defaultMode = this.selectedMode;
     void this.plugin.saveSettings(true).catch((error) => {
-      console.error("Codex composer defaults save failed", error);
+      console.error("OpenCode composer defaults save failed", error);
       new import_obsidian4.Notice(`\u8FD0\u884C\u53C2\u6570\u4FDD\u5B58\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
     });
   }
@@ -13546,7 +13537,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const name = await textInputModal(this.app, "\u91CD\u547D\u540D\u4F1A\u8BDD", "\u540D\u79F0", session.title);
     if (!name) return;
     session.title = name;
-    if (session.threadId) await this.plugin.codex?.setThreadName(session.threadId, name).catch(() => void 0);
+    if (session.threadId) await this.plugin.openCode?.setThreadName(session.threadId, name).catch(() => void 0);
     await this.plugin.saveSettings();
     this.renderTabs();
   }
@@ -13572,24 +13563,24 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     new import_obsidian4.Notice("\u5DF2\u5220\u9664\u4F1A\u8BDD");
   }
   createToolbarControl(container, iconName, label) {
-    const control = container.createDiv({ cls: "codex-control", attr: { title: label } });
-    const icon = control.createSpan({ cls: "codex-control-icon" });
+    const control = container.createDiv({ cls: "xy-control", attr: { title: label } });
+    const icon = control.createSpan({ cls: "xy-control-icon" });
     (0, import_obsidian4.setIcon)(icon, iconName);
     return control;
   }
   createActionButton(container, iconName, label, title) {
     const button = container.createEl("button", {
-      cls: "codex-toolbar-button codex-action-button",
+      cls: "xy-toolbar-button xy-action-button",
       attr: { type: "button", "aria-label": title, title }
     });
-    const icon = button.createSpan({ cls: "codex-action-icon" });
+    const icon = button.createSpan({ cls: "xy-action-icon" });
     (0, import_obsidian4.setIcon)(icon, iconName);
-    button.createSpan({ cls: "codex-action-label", text: label });
+    button.createSpan({ cls: "xy-action-label", text: label });
     return button;
   }
   addSelect(container, iconName, values, selected, onChange, label) {
     const control = this.createToolbarControl(container, iconName, label);
-    const select = control.createEl("select", { cls: "codex-select", attr: { "aria-label": label, title: label } });
+    const select = control.createEl("select", { cls: "xy-select", attr: { "aria-label": label, title: label } });
     for (const value of values) select.createEl("option", { text: labelFor(value), value });
     select.value = selected;
     select.onchange = () => onChange(select.value);
@@ -13600,7 +13591,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const all = [...this.selectedSkill ? [{ type: "file", name: `/${this.selectedSkill.name}`, path: this.selectedSkill.path }] : [], ...this.attachments];
     this.attachmentsEl.toggleClass("is-empty", all.length === 0);
     for (const item of all) {
-      const chip = this.attachmentsEl.createDiv({ cls: "codex-attachment-chip" });
+      const chip = this.attachmentsEl.createDiv({ cls: "xy-attachment-chip" });
       chip.createSpan({ text: item.name });
       const remove = chip.createEl("button", { text: "\xD7", attr: { type: "button" } });
       remove.onclick = () => {
@@ -13620,7 +13611,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     if (!skills.length && !this.skillsRequested) {
       this.skillsRequested = true;
       this.skillMenuEl.empty();
-      this.skillMenuEl.createDiv({ cls: "codex-skill-empty", text: "\u6B63\u5728\u52A0\u8F7D skills..." });
+      this.skillMenuEl.createDiv({ cls: "xy-skill-empty", text: "\u6B63\u5728\u52A0\u8F7D skills..." });
       this.skillMenuEl.addClass("is-visible");
       void this.plugin.ensureSkillsLoaded().then(() => {
         const activeQuery = getSlashQuery(this.inputEl.value);
@@ -13635,9 +13626,9 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const enabledSkills = filterEnabledSkills(this.plugin.lastStatus?.skills ?? [], this.plugin.settings.workspaceResources.skills);
     const matches = filterSkills(enabledSkills, query);
     for (const skill of matches) {
-      const item = this.skillMenuEl.createDiv({ cls: "codex-skill-item" });
-      item.createDiv({ cls: "codex-skill-name", text: `/${skill.name}` });
-      item.createDiv({ cls: "codex-skill-desc", text: skill.description || skill.path });
+      const item = this.skillMenuEl.createDiv({ cls: "xy-skill-item" });
+      item.createDiv({ cls: "xy-skill-name", text: `/${skill.name}` });
+      item.createDiv({ cls: "xy-skill-desc", text: skill.description || skill.path });
       item.onclick = () => {
         this.selectedSkill = skill;
         this.inputEl.value = this.inputEl.value.replace(/(?:^|\s)\/([^\s/]*)$/, "").trimStart();
@@ -13646,7 +13637,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
         this.inputEl.focus();
       };
     }
-    if (matches.length === 0) this.skillMenuEl.createDiv({ cls: "codex-skill-empty", text: "\u6CA1\u6709\u5339\u914D\u7684 skill" });
+    if (matches.length === 0) this.skillMenuEl.createDiv({ cls: "xy-skill-empty", text: "\u6CA1\u6709\u5339\u914D\u7684 skill" });
     this.skillMenuEl.addClass("is-visible");
   }
   async sendMessage() {
@@ -13678,7 +13669,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       if (!workspaceReady) return;
       const status = await this.plugin.ensureOpenCodeConnected();
       this.applyStatus();
-      if (!status.connected) throw new Error(status.errors[0] || "Codex \u672A\u8FDE\u63A5");
+      if (!status.connected) throw new Error(status.errors[0] || "OpenCode \u672A\u8FDE\u63A5");
       session = this.ensureSession();
       const runId = newId("run");
       this.activeRunId = runId;
@@ -13707,7 +13698,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       const turnOptions = this.currentTurnOptions(session);
       this.running = true;
       this.turnStartedAt = Date.now();
-      this.ensureThinkingMessage(session, "\u8FDE\u63A5\u4E2D", "\u6B63\u5728\u8FDE\u63A5 Codex...");
+      this.ensureThinkingMessage(session, "\u8FDE\u63A5\u4E2D", "\u6B63\u5728\u8FDE\u63A5 OpenCode...");
       this.armTurnWatchdog();
       this.applyStatus();
       if (!session.threadId && this.threadPrewarmPromise && this.threadPrewarmSessionId === session.id) {
@@ -13715,20 +13706,20 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
         if (!warmed && !session.threadId) throw new Error("\u65B0\u4F1A\u8BDD\u8FDE\u63A5\u8D85\u65F6\uFF0C\u8BF7\u91CD\u8BD5");
       }
       if (!session.threadId) {
-        const started = await this.plugin.codex.startThread(turnOptions);
+        const started = await this.plugin.openCode.startThread(turnOptions);
         session.threadId = started.threadId;
       } else {
-        await this.plugin.codex.resumeThread(session.threadId, turnOptions).catch(async () => {
-          const started = await this.plugin.codex.startThread(turnOptions);
+        await this.plugin.openCode.resumeThread(session.threadId, turnOptions).catch(async () => {
+          const started = await this.plugin.openCode.startThread(turnOptions);
           session.threadId = started.threadId;
         });
       }
       const input = buildUserInput(text, turnAttachments, turnSkill);
-      this.activeTurnId = await this.plugin.codex.startTurn(session.threadId, input, turnOptions);
+      this.activeTurnId = await this.plugin.openCode.startTurn(session.threadId, input, turnOptions);
       this.attachTurnIdToRun(session, this.activeTurnId);
       await this.plugin.saveSettings();
     } catch (error) {
-      const diagnostic = this.diagnoseCodexFailure(error);
+      const diagnostic = this.diagnoseOpenCodeFailure(error);
       this.running = false;
       this.activeTurnId = "";
       this.clearTurnWatchdog();
@@ -13740,7 +13731,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
         text: diagnostic.text
       });
       this.clearActiveRun();
-      new import_obsidian4.Notice(`Codex \u53D1\u9001\u5931\u8D25\uFF1A${diagnostic.title}`);
+      new import_obsidian4.Notice(`OpenCode \u53D1\u9001\u5931\u8D25\uFF1A${diagnostic.title}`);
     } finally {
       this.applyStatus();
     }
@@ -13884,8 +13875,8 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       this.setEditorActionStatus({ status: "connecting", actionLabel: request.action.label, qualityMode: request.qualityMode, modeLabel: request.modeConfig.label, filePath: request.source.filePath, model: request.modeConfig.model, startedAt: requestStartedAt });
       const status = await this.withEditorActionTimeout(this.plugin.ensureOpenCodeConnected(false, { silent: true }), timeoutMs, "\u5199\u4F5C\u64CD\u4F5C\u8FDE\u63A5\u8D85\u65F6");
       this.applyStatus();
-      if (!status.connected) throw new Error(status.errors[0] || "Codex \u672A\u8FDE\u63A5");
-      const availableModels = status.models.map((model2) => model2.model);
+      if (!status.connected) throw new Error(status.errors[0] || "OpenCode \u672A\u8FDE\u63A5");
+      const availableModels = status.models.map((model2) => model2.modelId);
       const model = this.effectiveEditorActionModel(availableModels, request.modeConfig.model);
       const understanding = await this.ensureArticleUnderstanding(request, availableModels, model, timeoutMs);
       const snapshot = understanding ? {
@@ -13925,7 +13916,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       this.prewarmEditorActionThread();
       return result;
     } catch (error) {
-      const diagnostic = this.diagnoseCodexFailure(error);
+      const diagnostic = this.diagnoseOpenCodeFailure(error);
       this.rejectEditorActionRun(new Error(diagnostic.text));
       this.running = false;
       this.activeTurnId = "";
@@ -14036,7 +14027,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       });
       this.editorActionThreadId = await this.withEditorActionTimeout(this.takeEditorActionThread(turnOptions), input.timeoutMs, "\u5199\u4F5C\u64CD\u4F5C\u542F\u52A8\u8D85\u65F6");
       this.editorActionThreadIds.add(this.editorActionThreadId);
-      this.activeTurnId = await this.withEditorActionTimeout(this.plugin.codex.startTurn(this.editorActionThreadId, buildEditorActionUserInput(input.prompt), turnOptions), input.timeoutMs, "\u5199\u4F5C\u64CD\u4F5C\u542F\u52A8\u8D85\u65F6");
+      this.activeTurnId = await this.withEditorActionTimeout(this.plugin.openCode.startTurn(this.editorActionThreadId, buildEditorActionUserInput(input.prompt), turnOptions), input.timeoutMs, "\u5199\u4F5C\u64CD\u4F5C\u542F\u52A8\u8D85\u65F6");
       if (this.activeTurnId) this.editorActionTurnIds.add(this.activeTurnId);
       const result = await waitForResult;
       this.releaseEditorActionRunLock(runId);
@@ -14044,9 +14035,9 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     } catch (error) {
       void waitForResult.catch(() => void 0);
       if (this.editorActionThreadId && this.activeTurnId) {
-        void this.plugin.codex?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => void 0);
+        void this.plugin.openCode?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => void 0);
       }
-      this.rejectEditorActionRun(new Error(this.diagnoseCodexFailure(error, input.model).text));
+      this.rejectEditorActionRun(new Error(this.diagnoseOpenCodeFailure(error, input.model).text));
       this.releaseEditorActionRunLock(runId);
       throw error;
     }
@@ -14065,7 +14056,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const settings = this.plugin.settings.editorActions;
     const mode = settings.qualityMode;
     const modeConfig = resolveEditorActionModeConfig(settings, mode);
-    const availableModels = this.plugin.lastStatus?.models.map((item) => item.model) ?? [];
+    const availableModels = this.plugin.lastStatus?.models.map((item) => item.modelId) ?? [];
     const model = this.effectiveEditorActionModel(availableModels, modeConfig.model);
     const cachedEntry = settings.articleUnderstandingCache[source.filePath] ?? null;
     const cacheResolution = mode === "fast" ? { state: "missing", entry: null } : resolveArticleUnderstandingCache(settings.articleUnderstandingCache, source, mode, model);
@@ -14099,8 +14090,8 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     this.editorActionHarnessRunId = harnessRunId;
     try {
       const status = await this.plugin.ensureOpenCodeConnected(false, { silent: true });
-      if (!status.connected) throw new Error("Codex \u672A\u8FDE\u63A5");
-      const model = this.effectiveEditorActionModel(status.models.map((item) => item.model), modeConfig.model);
+      if (!status.connected) throw new Error("OpenCode \u672A\u8FDE\u63A5");
+      const model = this.effectiveEditorActionModel(status.models.map((item) => item.modelId), modeConfig.model);
       const request = {
         id: newId("editor-action-refresh"),
         action: { id: "rewrite", label: "\u7406\u89E3\u6587\u7AE0", enabled: true, promptTemplate: "" },
@@ -14122,7 +14113,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
         prompt: "",
         createdAt: Date.now()
       };
-      await this.ensureArticleUnderstanding(request, status.models.map((item) => item.model), model, editorActionTimeoutForMode(settings.timeoutMs, mode), true);
+      await this.ensureArticleUnderstanding(request, status.models.map((item) => item.modelId), model, editorActionTimeoutForMode(settings.timeoutMs, mode), true);
       this.setEditorActionStatus({
         status: "idle",
         qualityMode: mode,
@@ -14187,7 +14178,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
   async stopTurn() {
     if (this.isEditorActionRunActive()) {
       if (this.editorActionThreadId && this.activeTurnId) {
-        await this.plugin.codex?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => void 0);
+        await this.plugin.openCode?.interruptTurn(this.editorActionThreadId, this.activeTurnId).catch(() => void 0);
       }
       this.rejectEditorActionRun(new Error("\u5199\u4F5C\u64CD\u4F5C\u5DF2\u4E2D\u65AD"));
       this.running = false;
@@ -14201,7 +14192,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     }
     const session = this.activeRunSession();
     if (!session.threadId || !this.activeTurnId) return;
-    await this.plugin.codex?.interruptTurn(session.threadId, this.activeTurnId).catch(() => void 0);
+    await this.plugin.openCode?.interruptTurn(session.threadId, this.activeTurnId).catch(() => void 0);
     if (this.editorActionRun?.runId === this.activeRunId) this.rejectEditorActionRun(new Error("\u5199\u4F5C\u64CD\u4F5C\u5DF2\u4E2D\u65AD"));
     this.running = false;
     this.activeTurnId = "";
@@ -14232,7 +14223,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       this.running = false;
       if (this.isEditorActionRunActive()) {
         if (timedOutThreadId && timedOutTurnId) {
-          void this.plugin.codex?.interruptTurn(timedOutThreadId, timedOutTurnId).catch(() => void 0);
+          void this.plugin.openCode?.interruptTurn(timedOutThreadId, timedOutTurnId).catch(() => void 0);
         }
         this.rejectEditorActionRun(new Error("\u5199\u4F5C\u64CD\u4F5C\u54CD\u5E94\u8D85\u65F6"));
         this.setEditorActionStatus({ status: "failed", message: "\u54CD\u5E94\u8D85\u65F6", error: "\u5199\u4F5C\u64CD\u4F5C\u54CD\u5E94\u8D85\u65F6" });
@@ -14247,7 +14238,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       const session = this.activeRunSession();
       const knowledgeSession = this.isKnowledgeBaseSession(session);
       if (knowledgeSession && session.threadId && timedOutTurnId) {
-        void this.plugin.codex?.interruptTurn(session.threadId, timedOutTurnId).catch(() => void 0);
+        void this.plugin.openCode?.interruptTurn(session.threadId, timedOutTurnId).catch(() => void 0);
       }
       this.finishThinkingMessage(session, "\u5931\u8D25");
       this.finishRunningProcessMessages(session, "error");
@@ -14280,7 +14271,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     run.reject(error);
   }
   editorActionStartBlockReason() {
-    if (this.editorActionHarnessRunId) return "Codex \u6B63\u5728\u5904\u7406\u4E0A\u4E00\u8F6E\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5";
+    if (this.editorActionHarnessRunId) return "\u6B63\u5728\u5904\u7406\u4E0A\u4E00\u8F6E\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5";
     const reason = editorActionStartBlockReason({
       running: this.running,
       activeRunId: this.activeRunId,
@@ -14316,7 +14307,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
         return threadId;
       }
     }
-    const started = await this.plugin.codex.startThread(turnOptions);
+    const started = await this.plugin.openCode.startThread(turnOptions);
     this.editorActionThreadIds.add(started.threadId);
     return started.threadId;
   }
@@ -14328,18 +14319,18 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
   }
   async createEditorActionPrewarmThread() {
     const status = await this.plugin.ensureOpenCodeConnected(false, { silent: true });
-    if (!status.connected || !this.plugin.codex || this.running) return null;
+    if (!status.connected || !this.plugin.openCode || this.running) return null;
     const modeConfig = resolveEditorActionModeConfig(this.plugin.settings.editorActions);
     const turnOptions = {
       ...buildEditorActionTurnOptions({
-        model: this.effectiveEditorActionModel(status.models.map((model) => model.model), modeConfig.model),
+        model: this.effectiveEditorActionModel(status.models.map((model) => model.modelId), modeConfig.model),
         serviceTier: this.selectedServiceTier,
         timeoutMs: this.plugin.settings.editorActions.timeoutMs,
         workspaceResources: { plugins: {}, mcpServers: {}, skills: {} }
       }),
       requestTimeoutMs: 15e3
     };
-    const started = await this.plugin.codex.startThread(turnOptions);
+    const started = await this.plugin.openCode.startThread(turnOptions);
     if (this.running || this.editorActionPrewarmThreadId) return null;
     this.editorActionThreadIds.add(started.threadId);
     this.editorActionPrewarmThreadId = started.threadId;
@@ -14364,7 +14355,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const run = this.editorSummaryRun;
     if (!run) return;
     if (run.threadId && this.activeRunId === run.runId && this.activeTurnId) {
-      void this.plugin.codex?.interruptTurn(run.threadId, this.activeTurnId).catch(() => void 0);
+      void this.plugin.openCode?.interruptTurn(run.threadId, this.activeTurnId).catch(() => void 0);
     }
     this.rejectEditorSummaryRun(new Error(reason));
     this.releaseEditorSummaryRunLock(run.runId);
@@ -14375,7 +14366,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
       const run = this.editorSummaryRun;
       if (!run) return;
       if (run.threadId && this.activeTurnId) {
-        void this.plugin.codex?.interruptTurn(run.threadId, this.activeTurnId).catch(() => void 0);
+        void this.plugin.openCode?.interruptTurn(run.threadId, this.activeTurnId).catch(() => void 0);
       }
       this.rejectEditorSummaryRun(new Error("\u6458\u8981\u751F\u6210\u8D85\u65F6"));
       this.releaseEditorSummaryRunLock(run.runId);
@@ -14461,10 +14452,6 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     const provider = getActiveApiProvider(this.plugin.settings);
     return provider ? getApiProviderModels(provider) : [];
   }
-  resolvedKnowledgeBackend() {
-    const configured = this.plugin.settings.knowledgeBase.backend;
-    return configured === "default" ? this.plugin.settings.agentBackend : configured;
-  }
   effectiveModel() {
     const providerModels = this.activeProviderModels();
     if (providerModels.length) {
@@ -14498,8 +14485,8 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u6536\u85CF\u5185\u5BB
     if (session.threadId) return true;
     if (!normalizeWorkspacePath(session.cwd) || !workspaceDirectoryExists(session.cwd)) return false;
     const status = await this.plugin.ensureOpenCodeConnected();
-    if (!status.connected || !this.plugin.codex || session.threadId) return Boolean(session.threadId);
-    const started = await this.plugin.codex.startThread(this.currentTurnOptions(session));
+    if (!status.connected || !this.plugin.openCode || session.threadId) return Boolean(session.threadId);
+    const started = await this.plugin.openCode.startThread(this.currentTurnOptions(session));
     session.threadId = started.threadId;
     await this.plugin.saveSettings();
     return true;
@@ -14817,7 +14804,7 @@ ${item.aggregatedOutput ?? ""}`.trim(), item.status || "completed", item);
     if (!this.plugin.settings.showContext) return;
     const view = contextUsageView(tokenUsage);
     this.contextValueEl.setText(view.label);
-    this.contextEl.style.setProperty("--codex-context-angle", `${view.angle}deg`);
+    this.contextEl.style.setProperty("--xy-context-angle", `${view.angle}deg`);
     this.contextEl.setAttr("aria-label", view.title);
     this.contextEl.setAttr("title", view.title);
     this.contextEl.toggleClass("is-empty", view.percent === null);
@@ -14828,46 +14815,46 @@ ${item.aggregatedOutput ?? ""}`.trim(), item.status || "completed", item);
     this.mcpPanelEl.toggleClass("is-visible", willOpen);
     if (!willOpen) return;
     this.mcpPanelEl.empty();
-    this.mcpPanelEl.createDiv({ cls: "codex-mcp-title", text: "MCP \u72B6\u6001" });
-    this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "\u6B63\u5728\u8BFB\u53D6 MCP \u72B6\u6001..." });
+    this.mcpPanelEl.createDiv({ cls: "xy-mcp-title", text: "MCP \u72B6\u6001" });
+    this.mcpPanelEl.createDiv({ cls: "xy-mcp-empty", text: "\u6B63\u5728\u8BFB\u53D6 MCP \u72B6\u6001..." });
     const status = await this.plugin.ensureOpenCodeConnected();
-    if (!status.connected || !this.plugin.codex) {
-      this.renderMcpPanel([], "Codex \u672A\u8FDE\u63A5");
+    if (!status.connected || !this.plugin.openCode) {
+      this.renderMcpPanel([], "OpenCode \u672A\u8FDE\u63A5");
       return;
     }
-    const result = await this.plugin.codex.refreshMcpStatus();
+    const result = await this.plugin.openCode.refreshMcpStatus();
     if (this.plugin.lastStatus) this.plugin.lastStatus.mcpServers = result.servers;
     this.renderMcpPanel(result.servers, result.error);
   }
   renderMcpPanel(servers, error) {
     this.mcpPanelEl.empty();
-    this.mcpPanelEl.createDiv({ cls: "codex-mcp-title", text: "MCP \u72B6\u6001" });
+    this.mcpPanelEl.createDiv({ cls: "xy-mcp-title", text: "MCP \u72B6\u6001" });
     if (error) {
-      this.mcpPanelEl.createDiv({ cls: "codex-mcp-error", text: `\u8BFB\u53D6\u5931\u8D25\uFF1A${error}` });
-      const retry = this.mcpPanelEl.createEl("button", { cls: "codex-mcp-retry", text: "\u91CD\u65B0\u8BFB\u53D6 MCP", attr: { type: "button" } });
+      this.mcpPanelEl.createDiv({ cls: "xy-mcp-error", text: `\u8BFB\u53D6\u5931\u8D25\uFF1A${error}` });
+      const retry = this.mcpPanelEl.createEl("button", { cls: "xy-mcp-retry", text: "\u91CD\u65B0\u8BFB\u53D6 MCP", attr: { type: "button" } });
       retry.onclick = () => {
         this.mcpPanelEl.removeClass("is-visible");
         void this.toggleMcpPanel();
       };
     }
     if (!this.plugin.settings.mcpEnabled && servers.length) {
-      this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "\u5DF2\u8BFB\u53D6\u5230 MCP \u670D\u52A1\u3002\u804A\u5929 MCP \u603B\u5F00\u5173\u5173\u95ED\uFF0C\u4E0B\u4E00\u8F6E\u5BF9\u8BDD\u6682\u4E0D\u8C03\u7528 MCP\u3002" });
+      this.mcpPanelEl.createDiv({ cls: "xy-mcp-empty", text: "\u5DF2\u8BFB\u53D6\u5230 MCP \u670D\u52A1\u3002\u804A\u5929 MCP \u603B\u5F00\u5173\u5173\u95ED\uFF0C\u4E0B\u4E00\u8F6E\u5BF9\u8BDD\u6682\u4E0D\u8C03\u7528 MCP\u3002" });
     }
     if (!servers.length) {
-      if (!error) this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "\u6CA1\u6709\u8BFB\u53D6\u5230 MCP \u670D\u52A1\u5668\u3002" });
+      if (!error) this.mcpPanelEl.createDiv({ cls: "xy-mcp-empty", text: "\u6CA1\u6709\u8BFB\u53D6\u5230 MCP \u670D\u52A1\u5668\u3002" });
       return;
     }
     for (const server of servers) this.renderMcpServer(server);
   }
   renderMcpServer(server) {
-    const row = this.mcpPanelEl.createDiv({ cls: "codex-mcp-row" });
-    row.createDiv({ cls: "codex-mcp-name", text: server.name });
-    row.createDiv({ cls: "codex-mcp-meta", text: `${Object.keys(server.tools ?? {}).length} \u4E2A\u5DE5\u5177 \xB7 ${server.authStatus ?? "unknown"}` });
+    const row = this.mcpPanelEl.createDiv({ cls: "xy-mcp-row" });
+    row.createDiv({ cls: "xy-mcp-name", text: server.name });
+    row.createDiv({ cls: "xy-mcp-meta", text: `${Object.keys(server.tools ?? {}).length} \u4E2A\u5DE5\u5177 \xB7 ${server.authStatus ?? "unknown"}` });
     if (server.authStatus === "notLoggedIn") {
-      const login = row.createEl("button", { cls: "codex-toolbar-button", text: "\u767B\u5F55", attr: { type: "button" } });
+      const login = row.createEl("button", { cls: "xy-toolbar-button", text: "\u767B\u5F55", attr: { type: "button" } });
       login.onclick = async () => {
         try {
-          const url = await this.plugin.codex?.startMcpOAuth(server.name);
+          const url = await this.plugin.openCode?.startMcpOAuth(server.name);
           if (url) window.open(url);
           else new import_obsidian4.Notice("\u6CA1\u6709\u62FF\u5230 MCP \u767B\u5F55\u94FE\u63A5");
         } catch (error) {
@@ -14887,7 +14874,7 @@ ${item.aggregatedOutput ?? ""}`.trim(), item.status || "completed", item);
   addContextCompactionMessage(session) {
     const last = session.messages[session.messages.length - 1];
     if (last?.itemType === "contextCompaction" && Date.now() - last.createdAt < 1e4) return;
-    this.addMessageToSession(session, { role: "system", title: "\u4E0A\u4E0B\u6587\u538B\u7F29", itemType: "contextCompaction", text: "Codex \u5DF2\u81EA\u52A8\u538B\u7F29\u4E0A\u4E0B\u6587\u3002", createdAt: Date.now() });
+    this.addMessageToSession(session, { role: "system", title: "\u4E0A\u4E0B\u6587\u538B\u7F29", itemType: "contextCompaction", text: "OpenCode \u5DF2\u81EA\u52A8\u538B\u7F29\u4E0A\u4E0B\u6587\u3002", createdAt: Date.now() });
   }
   clearActiveRun() {
     this.activeRunId = "";
@@ -14939,7 +14926,7 @@ ${item.aggregatedOutput ?? ""}`.trim(), item.status || "completed", item);
   measureVisibleVirtualRows(forceBottom = false) {
     if (!this.virtualListEl) return false;
     let changed = false;
-    for (const rowEl of Array.from(this.virtualListEl.querySelectorAll(".codex-virtual-row"))) {
+    for (const rowEl of Array.from(this.virtualListEl.querySelectorAll(".xy-virtual-row"))) {
       const id = rowEl.dataset.rowId;
       if (!id) continue;
       const height = Math.ceil(rowEl.getBoundingClientRect().height);
@@ -15074,7 +15061,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u672A\u9009\u62E9\u6587\u4EF
       this.attachments.push(...pasted);
       this.renderAttachments();
     } catch (error) {
-      console.error("Codex paste image failed", error);
+      console.error("OpenCode paste image failed", error);
       new import_obsidian4.Notice("\u7C98\u8D34\u56FE\u7247\u5931\u8D25");
     }
   }
@@ -15097,30 +15084,30 @@ var KnowledgeBaseHistoryModal = class extends import_obsidian4.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("codex-kb-history-modal");
-    const header = contentEl.createDiv({ cls: "codex-kb-history-header" });
+    contentEl.addClass("xy-kb-history-modal");
+    const header = contentEl.createDiv({ cls: "xy-kb-history-header" });
     header.createEl("h2", { text: "\u5386\u53F2" });
-    header.createDiv({ cls: "codex-kb-history-summary", text: `${this.days.length} \u5929\u8BB0\u5F55 \xB7 \u6309\u5929\u805A\u5408` });
-    const layout = contentEl.createDiv({ cls: "codex-kb-history-layout" });
-    this.dateListEl = layout.createDiv({ cls: "codex-kb-history-days" });
-    const main = layout.createDiv({ cls: "codex-kb-history-main" });
-    this.filterEl = main.createDiv({ cls: "codex-kb-history-actions" });
-    this.activeDateEl = main.createDiv({ cls: "codex-kb-history-current-day" });
-    this.listEl = main.createDiv({ cls: "codex-kb-history-list" });
+    header.createDiv({ cls: "xy-kb-history-summary", text: `${this.days.length} \u5929\u8BB0\u5F55 \xB7 \u6309\u5929\u805A\u5408` });
+    const layout = contentEl.createDiv({ cls: "xy-kb-history-layout" });
+    this.dateListEl = layout.createDiv({ cls: "xy-kb-history-days" });
+    const main = layout.createDiv({ cls: "xy-kb-history-main" });
+    this.filterEl = main.createDiv({ cls: "xy-kb-history-actions" });
+    this.activeDateEl = main.createDiv({ cls: "xy-kb-history-current-day" });
+    this.listEl = main.createDiv({ cls: "xy-kb-history-list" });
     this.renderDates();
     this.renderFilters();
     void this.selectDate(this.activeDate);
   }
   onClose() {
     this.contentEl.empty();
-    this.contentEl.removeClass("codex-kb-history-modal");
+    this.contentEl.removeClass("xy-kb-history-modal");
   }
   renderDates() {
     if (!this.dateListEl) return;
     this.dateListEl.empty();
     for (const day of this.days) {
       const button = this.dateListEl.createEl("button", {
-        cls: `codex-kb-history-day ${day.date === this.activeDate ? "is-active" : ""}`.trim(),
+        cls: `xy-kb-history-day ${day.date === this.activeDate ? "is-active" : ""}`.trim(),
         attr: { type: "button" }
       });
       button.createSpan({ text: day.date });
@@ -15140,7 +15127,7 @@ var KnowledgeBaseHistoryModal = class extends import_obsidian4.Modal {
     };
     for (const filter of Object.keys(labels)) {
       const button = this.filterEl.createEl("button", {
-        cls: `codex-resource-tab ${filter === this.activeFilter ? "is-active" : ""}`.trim(),
+        cls: `xy-resource-tab ${filter === this.activeFilter ? "is-active" : ""}`.trim(),
         text: labels[filter],
         attr: { type: "button" }
       });
@@ -15162,16 +15149,16 @@ var KnowledgeBaseHistoryModal = class extends import_obsidian4.Modal {
     this.renderDates();
     if (this.listEl) {
       this.listEl.empty();
-      this.listEl.createDiv({ cls: "codex-kb-history-more", text: "\u8BFB\u53D6\u4E2D..." });
+      this.listEl.createDiv({ cls: "xy-kb-history-more", text: "\u8BFB\u53D6\u4E2D..." });
     }
     try {
       this.messages = await this.loadDay(date);
     } catch (error) {
-      console.error("Codex knowledge history day read failed", error);
+      console.error("OpenCode knowledge history day read failed", error);
       this.messages = [];
       if (this.listEl) {
         this.listEl.empty();
-        this.listEl.createDiv({ cls: "codex-kb-history-more", text: "\u8BFB\u53D6\u5931\u8D25" });
+        this.listEl.createDiv({ cls: "xy-kb-history-more", text: "\u8BFB\u53D6\u5931\u8D25" });
       }
       return;
     }
@@ -15185,17 +15172,17 @@ var KnowledgeBaseHistoryModal = class extends import_obsidian4.Modal {
       this.activeDateEl.setText(`${this.activeDate} \xB7 ${filtered.length}/${this.messages.length} \u6761`);
     }
     if (!filtered.length) {
-      this.listEl.createDiv({ cls: "codex-kb-history-more", text: "\u8FD9\u4E00\u5929\u6CA1\u6709\u7B26\u5408\u7B5B\u9009\u7684\u8BB0\u5F55\u3002" });
+      this.listEl.createDiv({ cls: "xy-kb-history-more", text: "\u8FD9\u4E00\u5929\u6CA1\u6709\u7B26\u5408\u7B5B\u9009\u7684\u8BB0\u5F55\u3002" });
       return;
     }
     for (const message of filtered) {
-      const row = this.listEl.createDiv({ cls: "codex-kb-history-row" });
-      const meta = row.createDiv({ cls: "codex-kb-history-meta" });
+      const row = this.listEl.createDiv({ cls: "xy-kb-history-row" });
+      const meta = row.createDiv({ cls: "xy-kb-history-meta" });
       meta.createSpan({ text: formatAbsoluteTime(message.createdAt) });
       meta.createSpan({ text: roleLabel(message.role) });
       if (message.title) meta.createSpan({ text: message.title });
       if (message.status) meta.createSpan({ text: message.status });
-      row.createDiv({ cls: "codex-kb-history-text", text: compactHistoryText(message) });
+      row.createDiv({ cls: "xy-kb-history-text", text: compactHistoryText(message) });
     }
   }
 };
@@ -15331,7 +15318,7 @@ function editorActionStatusLabel(status) {
     return "\u5199\u4F5C";
   }
   if (status.status === "preparing") return `\u51C6\u5907${action}`;
-  if (status.status === "connecting") return "\u8FDE\u63A5 Codex";
+  if (status.status === "connecting") return "\u8FDE\u63A5 OpenCode";
   if (status.status === "generating") {
     const seconds = status.startedAt ? Math.max(0, Math.floor((Date.now() - status.startedAt) / 1e3)) : 0;
     if (status.phase === "understanding") return `\u7406\u89E3\u4E2D ${seconds}s`;
@@ -15383,7 +15370,7 @@ async function pickWorkspaceDirectory(defaultPath) {
   const dialog = electron?.remote?.dialog ?? electron?.dialog;
   if (!dialog?.showOpenDialog) return void 0;
   const result = await dialog.showOpenDialog({
-    title: "\u9009\u62E9 Codex \u5DE5\u4F5C\u533A",
+    title: "\u9009\u62E9 OpenCode \u5DE5\u4F5C\u533A",
     defaultPath: normalizeWorkspacePath(defaultPath) || void 0,
     properties: ["openDirectory", "createDirectory"]
   });
@@ -15719,9 +15706,9 @@ var EditorActionCandidateWidget = class extends import_view.WidgetType {
   }
   toDOM() {
     const span = document.createElement("span");
-    span.className = "codex-editor-action-candidate";
+    span.className = "xy-editor-action-candidate";
     span.textContent = this.candidate.candidateText;
-    span.title = "Codex \u5019\u9009\u6587\u672C\uFF1AEnter \u786E\u8BA4\uFF0CEsc \u53D6\u6D88";
+    span.title = "\u5019\u9009\u6587\u672C\uFF1AEnter \u786E\u8BA4\uFF0CEsc \u53D6\u6D88";
     return span;
   }
   ignoreEvent() {
@@ -15888,7 +15875,7 @@ var EditorActionController = class {
     try {
       const range = editorActionCandidateReplacementRange(candidate);
       setEditorActionCandidate(editor, null);
-      editor.replaceRange(candidate.candidateText, editor.offsetToPos(range.fromOffset), editor.offsetToPos(range.toOffset), "codex-editor-action");
+      editor.replaceRange(candidate.candidateText, editor.offsetToPos(range.fromOffset), editor.offsetToPos(range.toOffset), "xy-editor-action");
       this.active = null;
       const message = confirmedActionMessage(candidate.actionId);
       this.plugin.getXiaoyuanView()?.setEditorActionStatus({ status: "confirmed", message });
@@ -15938,7 +15925,7 @@ function isLintOnlyKnowledgeBaseReport(text) {
 }
 function recoveredLintReportSummary(reportPath) {
   const suffix = reportPath.trim() ? `\u62A5\u544A\uFF1A${reportPath.trim()}` : "\u62A5\u544A\u5DF2\u751F\u6210\u3002";
-  return `\u4F53\u68C0\u62A5\u544A\u5DF2\u751F\u6210\u3002Codex \u8FD4\u56DE\u5931\u8D25\u72B6\u6001\uFF0C\u4F46 lint-only \u62A5\u544A\u6587\u4EF6\u5B58\u5728\uFF0C\u5DF2\u6062\u590D\u4E3A\u6210\u529F\u3002${suffix}`;
+  return `\u4F53\u68C0\u62A5\u544A\u5DF2\u751F\u6210\u3002OpenCode \u8FD4\u56DE\u5931\u8D25\u72B6\u6001\uFF0C\u4F46 lint-only \u62A5\u544A\u6587\u4EF6\u5B58\u5728\uFF0C\u5DF2\u6062\u590D\u4E3A\u6210\u529F\u3002${suffix}`;
 }
 
 // src/knowledge-base/discovery.ts
@@ -16532,8 +16519,8 @@ async function resolveJournalDailyTarget(vaultPath, userRequest, now = /* @__PUR
     templateDirectories: buildJournalTemplateDirectories(layout.rootPath, layout.dailyRootPath, monthKey, yearKey),
     samplePaths: await collectRecentJournalSamples(vaultPath, layout.dailyRootPath, relativePath),
     evidenceWindow,
-    codexSessionsPath: path13.join(os3.homedir(), ".codex", "sessions"),
-    codexSessionGlobs: buildCodexSessionGlobs(evidenceWindow)
+    sessionsPath: path13.join(os3.homedir(), ".opencode", "sessions"),
+    sessionGlobs: buildSessionGlobs(evidenceWindow)
   };
 }
 async function ensureJournalTargetFolders(vaultPath, target) {
@@ -16544,11 +16531,10 @@ async function ensureJournalTargetFolders(vaultPath, target) {
 }
 function buildKnowledgeBaseJournalPrompt(input) {
   const generatedAt = input.generatedAt ?? /* @__PURE__ */ new Date();
-  const backend = input.backend ?? "codex-cli";
-  const sourceLabel = backend === "opencode" ? "OpenCode API" : "Codex CLI";
-  const workLabel = backend === "opencode" ? "OpenCode" : "Codex";
+  const sourceLabel = "OpenCode API";
+  const workLabel = "OpenCode";
   return [
-    "\u4F60\u6B63\u5728\u6267\u884C Codex Obsidian Daily Journal\u3002",
+    "\u4F60\u6B63\u5728\u6267\u884C OpenCode Obsidian Daily Journal\u3002",
     "",
     `\u8FD9\u4E2A\u4EFB\u52A1\u9ED8\u8BA4\u4E0D\u662F\u751F\u6D3B\u6563\u6587\uFF0C\u800C\u662F\u628A\u65B9\u54E5\u5F53\u5929\u5728 ${workLabel} \u91CC\u5B9E\u9645\u63A8\u8FDB\u7684\u5DE5\u4F5C\u5199\u8FDB Obsidian \u65E5\u8BB0\u3002`,
     "\u5FC5\u987B\u4F7F\u7528\u4E2D\u6587\uFF0C\u5148\u7ED9\u7ED3\u8BBA\uFF0C\u518D\u7ED9\u5173\u952E\u4F9D\u636E\uFF1B\u4E0D\u8981\u5199\u7A7A\u8BDD\uFF0C\u4E0D\u8981\u628A\u547D\u4EE4\u6D41\u6C34\u8D26\u539F\u6837\u585E\u8FDB\u53BB\u3002",
@@ -16574,7 +16560,7 @@ function buildKnowledgeBaseJournalPrompt(input) {
     ...input.target.samplePaths.length ? input.target.samplePaths.map((sample) => `- ${sample}`) : ["- \u672A\u627E\u5230\u5386\u53F2\u6837\u672C\uFF1B\u4F7F\u7528\u4E0B\u9762\u7684\u515C\u5E95\u683C\u5F0F\u3002"],
     "",
     "## \u5F53\u5929\u8BB0\u5F55\u8BFB\u53D6\u89C4\u5219",
-    ...buildJournalEvidenceInstructions(backend, input.target, input.openCodeHistory),
+    ...buildJournalEvidenceInstructions(input.target, input.openCodeHistory),
     "",
     "## \u6267\u884C\u6B65\u9AA4",
     `1. \u5148\u8BFB\u53D6\u6700\u8FD1\u65E5\u8BB0\u6837\u672C\uFF0C\u6CBF\u7528\u5B83\u4EEC\u7684 YAML\u3001\u6807\u9898\u3001\u5206\u8282\u548C\u8BED\u6C14\u3002`,
@@ -16632,24 +16618,15 @@ function buildJournalEvidenceWindow(targetDate) {
     label: `${formatDateTimeDisplay(start)} - ${formatDateTimeDisplay(end)}`
   };
 }
-function buildJournalEvidenceInstructions(backend, target, openCodeHistory) {
-  if (backend === "opencode") {
-    return [
-      "- \u5F53\u524D\u77E5\u8BC6\u5E93\u540E\u7AEF\u662F OpenCode API\uFF0C\u6240\u4EE5\u201C\u5F53\u5929\u8BB0\u5F55\u201D\u5FC5\u987B\u6309 OpenCode \u804A\u5929\u8BB0\u5F55\u7406\u89E3\uFF0C\u4E0D\u8981\u518D\u8BFB\u53D6 Codex sessions \u5F53\u4F5C\u4E3B\u8BC1\u636E\u3002",
-      "- \u63D2\u4EF6\u5DF2\u5728\u6267\u884C\u524D\u901A\u8FC7 OpenCode API \u7684 `session.list` / `session.messages` \u8BFB\u53D6\u76EE\u6807\u7A97\u53E3\u5185\u8BB0\u5F55\uFF1B\u4F18\u5148\u4F7F\u7528\u4E0B\u9762\u7684 OpenCode \u8BC1\u636E\u6458\u8981\u3002",
-      "- \u5982\u679C\u6458\u8981\u4E3A\u7A7A\uFF0C\u8BF4\u660E OpenCode \u5728\u8BE5\u7A97\u53E3\u5185\u6CA1\u6709\u53EF\u7528\u804A\u5929\u8BB0\u5F55\uFF1B\u65B0\u7528\u6237\u9996\u6B21\u5199\u65E5\u8BB0\u65F6\u4ECD\u8981\u6309 journal \u6A21\u677F\u521B\u5EFA\u76EE\u6807\u6587\u4EF6\uFF0C\u4F46\u5185\u5BB9\u8981\u77ED\uFF0C\u4E0D\u8981\u7F16\u9020\u3002",
-      "- \u5982\u9700\u590D\u6838\u672C\u673A\u539F\u59CB\u8BB0\u5F55\uFF0C\u53EF\u53C2\u8003 OpenCode \u672C\u5730\u5E93 `~/.opencode/opencode.db` \u7684 `sessions` / `messages` \u8868\uFF0C\u4F46\u4E0D\u8981\u628A\u5B83\u5F53\u6210 Codex \u8BB0\u5F55\u3002",
-      "",
-      "### OpenCode \u5F53\u5929\u804A\u5929\u8BB0\u5F55\u6458\u8981",
-      ...formatOpenCodeHistoryForPrompt(openCodeHistory, target.evidenceWindow)
-    ];
-  }
+function buildJournalEvidenceInstructions(target, openCodeHistory) {
   return [
-    "- \u5F53\u524D\u77E5\u8BC6\u5E93\u540E\u7AEF\u662F Codex CLI\uFF0C\u6240\u4EE5\u201C\u5F53\u5929\u8BB0\u5F55\u201D\u9ED8\u8BA4\u8BFB\u53D6 Codex \u4F1A\u8BDD\u8BB0\u5F55\u3002",
-    "- \u8BFB\u53D6\u4E0B\u9762\u4E24\u4E2A\u65E5\u671F\u76EE\u5F55\uFF0C\u5E76\u53EA\u4FDD\u7559\u76EE\u6807\u7A97\u53E3\u5185\u7684\u6D88\u606F\u3001\u5DE5\u5177\u8C03\u7528\u3001\u6587\u4EF6\u53D8\u66F4\u548C\u6700\u7EC8\u4EA7\u7269\uFF1A",
-    ...target.codexSessionGlobs.map((glob) => `  - ${glob}`),
-    `- \u8FC7\u6EE4\u7A97\u53E3\uFF1A${target.evidenceWindow.label}\uFF08\u8D77\u59CB\u542B\uFF0C\u7ED3\u675F\u4E0D\u542B\uFF09\u3002`,
-    "- \u4E0D\u8981\u628A\u547D\u4EE4\u548C JSONL \u539F\u6837\u6284\u8FDB\u65E5\u8BB0\uFF0C\u8981\u5148\u6D88\u5316\u6210\u6B63\u5E38\u4EBA\u80FD\u8BFB\u61C2\u7684\u5DE5\u4F5C\u8FDB\u5C55\u3002"
+    `- \u5F53\u524D\u77E5\u8BC6\u5E93\u540E\u7AEF\u662F OpenCode API\uFF0C\u6240\u4EE5\u201C\u5F53\u5929\u8BB0\u5F55\u201D\u5FC5\u987B\u6309 OpenCode \u804A\u5929\u8BB0\u5F55\u7406\u89E3\u3002`,
+    "- \u63D2\u4EF6\u5DF2\u5728\u6267\u884C\u524D\u901A\u8FC7 OpenCode API \u7684 `session.list` / `session.messages` \u8BFB\u53D6\u76EE\u6807\u7A97\u53E3\u5185\u8BB0\u5F55\uFF1B\u4F18\u5148\u4F7F\u7528\u4E0B\u9762\u7684 OpenCode \u8BC1\u636E\u6458\u8981\u3002",
+    "- \u5982\u679C\u6458\u8981\u4E3A\u7A7A\uFF0C\u8BF4\u660E OpenCode \u5728\u8BE5\u7A97\u53E3\u5185\u6CA1\u6709\u53EF\u7528\u804A\u5929\u8BB0\u5F55\uFF1B\u65B0\u7528\u6237\u9996\u6B21\u5199\u65E5\u8BB0\u65F6\u4ECD\u8981\u6309 journal \u6A21\u677F\u521B\u5EFA\u76EE\u6807\u6587\u4EF6\uFF0C\u4F46\u5185\u5BB9\u8981\u77ED\uFF0C\u4E0D\u8981\u7F16\u9020\u3002",
+    "- \u5982\u9700\u590D\u6838\u672C\u673A\u539F\u59CB\u8BB0\u5F55\uFF0C\u53EF\u53C2\u8003 OpenCode \u672C\u5730\u5E93 `~/.opencode/opencode.db` \u7684 `sessions` / `messages` \u8868\u3002",
+    "",
+    "### OpenCode \u5F53\u5929\u804A\u5929\u8BB0\u5F55\u6458\u8981",
+    ...formatOpenCodeHistoryForPrompt(openCodeHistory, target.evidenceWindow)
   ];
 }
 function formatOpenCodeHistoryForPrompt(snapshot, window2) {
@@ -16698,8 +16675,8 @@ function localDate(year, month, day, sourceTime) {
 function addDays(date, days) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days, date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds());
 }
-function buildCodexSessionGlobs(window2) {
-  return [window2.start, addDays(window2.start, 1)].map((date) => path13.join(os3.homedir(), ".codex", "sessions", String(date.getFullYear()), pad3(date.getMonth() + 1), pad3(date.getDate()), "*.jsonl"));
+function buildSessionGlobs(window2) {
+  return [window2.start, addDays(window2.start, 1)].map((date) => path13.join(os3.homedir(), ".opencode", "sessions", String(date.getFullYear()), pad3(date.getMonth() + 1), pad3(date.getDate()), "*.jsonl"));
 }
 async function detectJournalLayout(vaultPath) {
   const candidates = [
@@ -17330,7 +17307,7 @@ async function uniqueTempSibling(fromAbs) {
   const dir = path15.dirname(fromAbs);
   const base = path15.basename(fromAbs);
   for (let index = 0; index < 20; index += 1) {
-    const candidate = path15.join(dir, `.codex-rename-${Date.now()}-${index}-${base}`);
+    const candidate = path15.join(dir, `.xy-rename-${Date.now()}-${index}-${base}`);
     if (!await exists5(candidate)) return candidate;
   }
   throw new Error(`\u65E0\u6CD5\u521B\u5EFA\u4E34\u65F6\u91CD\u547D\u540D\u8DEF\u5F84\uFF1A${fromAbs}`);
@@ -17927,7 +17904,7 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u6CA1\u6709\u53EF\u6536\u96C
           settings.lastSummary = recoveredLintReportSummary(discovery.reportPath);
           recordKnowledgeBaseMaintenanceRun(settings, { status: "success", mode, reportPath: discovery.reportPath });
           await this.plugin.saveSettings(true);
-          new import_obsidian6.Notice("\u77E5\u8BC6\u5E93\u4F53\u68C0\u5B8C\u6210\uFF0CCodex \u72B6\u6001\u6709\u8B66\u544A");
+          new import_obsidian6.Notice("\u77E5\u8BC6\u5E93\u4F53\u68C0\u5B8C\u6210\uFF0COpenCode \u72B6\u6001\u6709\u8B66\u544A");
           return {
             status: "success",
             reportPath: discovery.reportPath,
@@ -17951,7 +17928,6 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u6CA1\u6709\u53EF\u6536\u96C
         error: message
       };
     } finally {
-      this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
       this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
@@ -17990,7 +17966,6 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u6CA1\u6709\u53EF\u6536\u96C
         message: error instanceof Error ? error.message : String(error)
       };
     } finally {
-      this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
       this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
@@ -18017,7 +17992,6 @@ ${paths.map((item) => `- ${item}`).join("\n")}` : "\u6CA1\u6709\u53EF\u6536\u96C
           ...copiedAttachments.map((item) => `- ${item}`)
         ].join("\n") : request,
         target,
-        backend: "opencode",
         openCodeHistory
       });
       const output = await this.runOpenCodeKnowledgeTask(prompt, [], "workspace-write");
@@ -18037,7 +18011,6 @@ ${output.trim().slice(0, 800)}` : ""].filter(Boolean).join("\n")
         message: error instanceof Error ? error.message : String(error)
       };
     } finally {
-      this.activeCodexRun = null;
       this.activeOpenCode = null;
       this.running = false;
       this.plugin.getXiaoyuanView()?.refreshKnowledgeBaseDashboard();
@@ -18247,7 +18220,7 @@ ${output.trim().slice(0, 800)}` : ""].filter(Boolean).join("\n")
     const vaultPath = this.plugin.getVaultPath();
     const dest = path17.join(vaultPath, "raw", "articles", "\u5FAE\u4FE1\u516C\u4F17\u53F7");
     await fsp11.mkdir(dest, { recursive: true });
-    const skillScript = path17.join(process.env.HOME || "", ".codex", "skills", "wechat-article-to-obsidian-raw", "scripts", "wechat_capture.mjs");
+    const skillScript = path17.join(process.env.HOME || "", ".opencode", "skills", "wechat-article-to-obsidian-raw", "scripts", "wechat_capture.mjs");
     if (await exists6(skillScript)) {
       try {
         const { stdout } = await execFilePromise("node", [skillScript, url, "--dest", dest], {
@@ -18403,7 +18376,7 @@ async function ensureFallbackReport(vaultPath, reportPath, input) {
   const lines = [
     "---",
     `created: ${new Date(input.startedAt).toISOString()}`,
-    "source: codex-echoink",
+    "source: xiaoyuan",
     "---",
     "",
     `# \u77E5\u8BC6\u5E93${labelForRunMode(input.mode)}\u62A5\u544A \u2014 ${formatDateForTitle(new Date(input.startedAt))}`,
@@ -18420,8 +18393,8 @@ async function ensureFallbackReport(vaultPath, reportPath, input) {
 async function appendStructureNormalizationReport(vaultPath, reportPath, structure) {
   const absolute = path17.join(vaultPath, reportPath);
   const current = await fsp11.readFile(absolute, "utf8").catch(() => "");
-  const markerStart = "<!-- codex-echoink-structure:start -->";
-  const markerEnd = "<!-- codex-echoink-structure:end -->";
+  const markerStart = "<!-- xy-structure:start -->";
+  const markerEnd = "<!-- xy-structure:end -->";
   const lines = [
     markerStart,
     "",
@@ -18456,14 +18429,14 @@ ${lines}`;
 async function writeKnowledgeBaseTracker(vaultPath, processed, updatedAt) {
   const tracker = path17.join(vaultPath, "outputs", ".ingest-tracker.md");
   await fsp11.mkdir(path17.dirname(tracker), { recursive: true });
-  const markerStart = "<!-- codex-echoink-kb:start -->";
-  const markerEnd = "<!-- codex-echoink-kb:end -->";
+  const markerStart = "<!-- xy-kb:start -->";
+  const markerEnd = "<!-- xy-kb:end -->";
   const current = await fsp11.readFile(tracker, "utf8").catch(() => "---\nupdated: \n---\n\n# Ingest Tracker\n");
   const entries = Object.values(processed).sort((left, right) => left.path.localeCompare(right.path)).map((item) => `- \`${item.path}\` | size=${item.size} | mtime=${Math.round(item.mtime)} | digested=${new Date(item.digestedAt).toISOString()}`);
   const block = [
     markerStart,
     "",
-    `## Codex EchoInk \u5904\u7406\u8BB0\u5F55\uFF08${new Date(updatedAt).toISOString()}\uFF09`,
+    `## \u5C0F\u5143 \u5904\u7406\u8BB0\u5F55\uFF08${new Date(updatedAt).toISOString()}\uFF09`,
     "",
     ...entries.length ? entries : ["- \u6682\u65E0"],
     "",
@@ -19347,7 +19320,7 @@ function kindLabel(kind) {
 var fsp13 = __toESM(require("fs/promises"));
 var path19 = __toESM(require("path"));
 var import_obsidian8 = require("obsidian");
-var VIEW_TYPE_REVIEW_PREVIEW = "codex-review-preview";
+var VIEW_TYPE_REVIEW_PREVIEW = "xy-review-preview";
 var ReviewPreviewView = class extends import_obsidian8.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -19378,15 +19351,15 @@ var ReviewPreviewView = class extends import_obsidian8.ItemView {
   async render() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("codex-review-preview");
+    contentEl.addClass("xy-review-preview");
     if (!this.htmlPath) {
-      contentEl.createDiv({ cls: "codex-resource-empty", text: "\u8FD8\u6CA1\u6709\u9009\u62E9\u590D\u76D8 HTML\u3002" });
+      contentEl.createDiv({ cls: "xy-resource-empty", text: "\u8FD8\u6CA1\u6709\u9009\u62E9\u590D\u76D8 HTML\u3002" });
       return;
     }
-    const title = contentEl.createDiv({ cls: "codex-review-preview-title" });
+    const title = contentEl.createDiv({ cls: "xy-review-preview-title" });
     title.createSpan({ text: this.htmlPath });
     const frame = contentEl.createEl("iframe", {
-      cls: "codex-review-preview-frame",
+      cls: "xy-review-preview-frame",
       attr: {
         title: this.htmlPath,
         sandbox: "allow-same-origin"
@@ -19396,7 +19369,7 @@ var ReviewPreviewView = class extends import_obsidian8.ItemView {
     const html = await fsp13.readFile(absolute, "utf8").catch(() => "");
     if (!html) {
       frame.remove();
-      contentEl.createDiv({ cls: "codex-resource-error", text: "HTML \u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BFB\u53D6\u3002" });
+      contentEl.createDiv({ cls: "xy-resource-error", text: "HTML \u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BFB\u53D6\u3002" });
       return;
     }
     frame.srcdoc = html;
@@ -19404,9 +19377,10 @@ var ReviewPreviewView = class extends import_obsidian8.ItemView {
 };
 
 // src/main.ts
-var CodexForObsidianPlugin = class extends import_obsidian9.Plugin {
+var XiaoyuanPlugin = class extends import_obsidian9.Plugin {
   settings;
   lastStatus = null;
+  openCode = null;
   view = null;
   reviewPreviewView = null;
   editorActions = null;
@@ -19647,9 +19621,9 @@ var CodexForObsidianPlugin = class extends import_obsidian9.Plugin {
       fsp14.readFile(llmWikiPath, "utf8").catch(() => "")
     ]);
     if (!agents || !llmWiki) return false;
-    const agentsLooksLikeCodexMemory = /codex-memory|CODEX-MEMORY|项目级上下文管理/.test(agents);
+    const agentsLooksLikeMemorySkill = /opencode-memory|OPENCODE-MEMORY|项目级上下文管理/.test(agents);
     const llmWikiLooksLikeKnowledgeRules = /知识库|Raw Sources|Ingest|Lint|Wiki/.test(llmWiki);
-    if (!agentsLooksLikeCodexMemory || !llmWikiLooksLikeKnowledgeRules) return false;
+    if (!agentsLooksLikeMemorySkill || !llmWikiLooksLikeKnowledgeRules) return false;
     this.settings.knowledgeBase.useCustomRulesFile = true;
     this.settings.knowledgeBase.rulesFilePath = DEFAULT_KNOWLEDGE_BASE_RULES_FILE;
     return true;
@@ -19744,6 +19718,9 @@ ${report}`.slice(0, 1e3);
   }
   handleOpenCodeNotification(notification) {
     this.view?.handleOpenCodeNotification(notification);
+  }
+  async ensureSkillsLoaded() {
+    if (!this.lastStatus) await this.ensureOpenCodeConnected();
   }
   async flushSettingsSave() {
     const run = this.saveQueue.then(async () => {

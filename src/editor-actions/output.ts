@@ -48,8 +48,8 @@ export function cleanEditorActionOutput(value: string): string {
 
 export function validateEditorActionCandidateText(value: string): { ok: true } | { ok: false; reason: string } {
   const text = value.trim();
-  if (!text) return { ok: false, reason: "Codex 没有返回可用候选文本" };
-  if (/<\/?codex-candidate>/i.test(text)) return { ok: false, reason: "候选正文仍包含内部标签" };
+  if (!text) return { ok: false, reason: "没有返回可用候选文本" };
+  if (/<\/?opencode-candidate>/i.test(text)) return { ok: false, reason: "候选正文仍包含内部标签" };
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   for (const line of lines) {
     if (DISALLOWED_OUTPUT_MARKERS.some((pattern) => pattern.test(line))) {
@@ -60,7 +60,7 @@ export function validateEditorActionCandidateText(value: string): { ok: true } |
 }
 
 function extractCandidateTag(value: string): string | null {
-  const match = value.match(/<codex-candidate>\s*([\s\S]*?)\s*<\/codex-candidate>/i);
+  const match = value.match(/<opencode-candidate>\s*([\s\S]*?)\s*<\/opencode-candidate>/i);
   return match ? match[1] : null;
 }
 

@@ -4,7 +4,7 @@ import * as https from "node:https";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2";
 import type { AgentBackend, AgentFileStatus, AgentModelInfo, AgentProfileInfo, AgentPromptOptions, AgentSessionOptions } from "../agent/types";
 import { formatOpenCodeError } from "./opencode-errors";
-import { flattenOpenCodeAgents, flattenOpenCodeModels, normalizeOpenCodeServerUrl, resolveOpenCodeCommand, toOpenCodePromptPart } from "./opencode-models";
+import { flattenOpenCodeAgents, flattenOpenCodeModels, normalizeOpenCodeServerUrl, resolveOpenCodeCommand, toOpenCodePromptPart, type Provider } from "./opencode-models";
 
 export interface OpenCodeBackendOptions {
   cliPath: string;

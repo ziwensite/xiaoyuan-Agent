@@ -22,8 +22,8 @@ import {
 } from "../core/mapping";
 import { settleStaleRunningMessages } from "../core/message-state";
 import { formatRateLimitUsage, normalizeRateLimitResponse } from "../core/rate-limits";
-import { diagnoseCodexError } from "../core/codex-diagnostics";
-import { formatJsonRpcError } from "../core/codex-rpc";
+import { diagnoseOpenCodeError } from "../core/opencode-diagnostics";
+import { formatJsonRpcError } from "../core/opencode-rpc";
 import { externalizeLargeMessages, pluginDataDir, prepareRawMessage, readRawText } from "../core/raw-message-store";
 import { splitVaultNoteLinkSegments } from "../core/vault-note-links";
 import { CHAT_TURN_WATCHDOG_MS, turnWatchdogTimeoutForSession, turnWatchdogTimeoutText } from "../ui/turn-watchdog";
@@ -69,7 +69,7 @@ import {
 } from "../settings/settings";
 import { buildSetupCheck, completeSetupState } from "../settings/setup-check";
 import { SETTINGS_COPY, SETTINGS_LANGUAGE_OPTIONS, settingsCopy } from "../settings/i18n";
-import { buildCodexLaunchConfig, resolveCodexCommand } from "../core/codex-service";
+import { buildOpenCodeLaunchConfig, resolveOpenCodeCommand as resolveCodexServiceCommand } from "../core/opencode-service";
 import { formatOpenCodeError } from "../core/opencode-errors";
 import {
   detectOpenCodeCommand,
@@ -112,12 +112,12 @@ import { discoverKnowledgeBaseSources } from "../knowledge-base/discovery";
 import { buildKnowledgeBaseDashboardSnapshot } from "../knowledge-base/dashboard";
 import { buildKnowledgeBaseInitializationPreview, executeKnowledgeBaseInitialization, KNOWLEDGE_BASE_TEMPLATE_VERSION } from "../knowledge-base/initializer";
 import { buildKnowledgeBaseJournalPrompt, ensureJournalTargetFolders, resolveJournalDailyTarget, stripJournalPrefix } from "../knowledge-base/journal";
-import { formatKnowledgeBaseCodexFailureSignal } from "../knowledge-base/failure";
+import { formatKnowledgeBaseFailureSignal } from "../knowledge-base/failure";
 import { buildKnowledgeBaseAskPrompt, buildKnowledgeBasePrompt } from "../knowledge-base/prompt";
 import { diffRawSnapshot } from "../knowledge-base/raw-integrity";
 import { KNOWLEDGE_BASE_COMMAND_GUIDE, knowledgeBaseHelpText, parseKnowledgeBaseCommand, shouldHandleKnowledgeBaseCommand } from "../knowledge-base/commands";
 import { buildKnowledgeBaseCitationSummary, findKnowledgeBaseAskMatches, stripAskCommand } from "../knowledge-base/query";
-import { routeKnowledgeBaseCodexNotification } from "../knowledge-base/codex-route";
+import { routeKnowledgeBaseNotification } from "../knowledge-base/opencode-route";
 import {
   compactKnowledgeBaseMessagesToActiveDay,
   collectKnowledgeBaseStorageStats,
@@ -135,9 +135,9 @@ import { repairKnowledgeBaseRulesFile } from "../knowledge-base/rules-repair";
 import { shouldRunScheduledKnowledgeBaseMaintenance } from "../knowledge-base/schedule";
 import { buildScheduledKnowledgeBaseMessage, extractKnowledgeBaseReportConclusion } from "../knowledge-base/scheduled-message";
 import { normalizeKnowledgeBaseStructure } from "../knowledge-base/structure-normalizer";
-import { CODEX_MEMORY_LITE_URL, DEFAULT_KNOWLEDGE_BASE_RULES_FILE } from "../knowledge-base/constants";
+import { MEMORY_LITE_URL, DEFAULT_KNOWLEDGE_BASE_RULES_FILE } from "../knowledge-base/constants";
 import { clearKnowledgeBaseVisibleHistory, getHiddenKnowledgeBaseMessages, getVisibleKnowledgeBaseMessages, restoreKnowledgeBaseVisibleHistory } from "../knowledge-base/session-history";
-import { buildCodexKnowledgeTurnOptions } from "../knowledge-base/turn-options";
+import { buildKnowledgeTurnOptions } from "../knowledge-base/turn-options";
 import { REVIEW_HTML_CSS, REVIEW_SECTION_HEADINGS, renderReviewHtml } from "../review/review-html-template";
 import {
   REVIEW_OUTPUT_DIR,
@@ -226,7 +226,7 @@ assert.deepEqual(splitVaultNoteLinkSegments("不是笔记：src/ui/render-messag
 assert.equal(buildSandboxPolicy("read-only", "/vault").type, "readOnly");
 assert.equal(buildSandboxPolicy("danger-full-access", "/vault").type, "dangerFullAccess");
 assert.deepEqual(buildSandboxPolicy("workspace-write", "/vault", ["/vault/wiki", "/vault/outputs"]).writableRoots?.slice(0, 2), ["/vault/wiki", "/vault/outputs"]);
-const kbTurnOptions = buildCodexKnowledgeTurnOptions({
+const kbTurnOptions = buildKnowledgeTurnOptions({
   settings: DEFAULT_SETTINGS,
   availableModels: [{ model: "gpt-test" }],
   vaultPath: "/vault",
@@ -236,7 +236,7 @@ assert.ok(!kbTurnOptions.writableRoots?.includes(path.join("/vault", "raw")));
 assert.ok(kbTurnOptions.writableRoots?.includes(path.join("/vault", "raw", "index.md")));
 assert.ok(kbTurnOptions.writableRoots?.includes(path.join("/vault", "inbox")));
 assert.ok(kbTurnOptions.writableRoots?.includes(path.join("/vault", "projects")));
-const journalTurnOptions = buildCodexKnowledgeTurnOptions({
+const journalTurnOptions = buildKnowledgeTurnOptions({
   settings: DEFAULT_SETTINGS,
   availableModels: [{ model: "gpt-test" }],
   vaultPath: "/vault",
@@ -247,7 +247,7 @@ assert.deepEqual(journalTurnOptions.writableRoots, ["/vault/journal", "/vault/01
 assert.equal(turnWatchdogTimeoutForSession(false), CHAT_TURN_WATCHDOG_MS);
 assert.equal(turnWatchdogTimeoutForSession(true), null);
 assert.ok(turnWatchdogTimeoutText(CHAT_TURN_WATCHDOG_MS).includes("重新连接 Codex"));
-const kbFailureSignal = formatKnowledgeBaseCodexFailureSignal("turn/completed", {
+const kbFailureSignal = formatKnowledgeBaseFailureSignal("turn/completed", {
   turn: {
     id: "turn-1",
     threadId: "thread-1",
@@ -270,8 +270,8 @@ assert.equal(DEFAULT_SETTINGS.proxyEnabled, false);
 assert.equal(DEFAULT_SETTINGS.settingsVersion, 26);
 assert.equal(DEFAULT_SETTINGS.settingsLanguage, "zh-CN");
 assert.equal(DEFAULT_SETTINGS.settingsTab, "general");
-assert.equal(DEFAULT_SETTINGS.agentBackend, "codex-cli");
-assert.equal(DEFAULT_SETTINGS.providerMode, "codex-login");
+assert.equal(DEFAULT_SETTINGS.agentBackend, "opencode");
+assert.equal(DEFAULT_SETTINGS.providerMode, "custom-api");
 assert.equal(DEFAULT_SETTINGS.editorActions.enabled, false);
 assert.equal(DEFAULT_SETTINGS.editorActions.statusSlotEnabled, true);
 assert.equal(DEFAULT_SETTINGS.editorActions.model, DEFAULT_EDITOR_ACTION_MODEL);
@@ -299,10 +299,10 @@ assert.equal(DEFAULT_SETTINGS.opencode.pdfEnabled, false);
 assert.equal(DEFAULT_SETTINGS.setup.completedAt, 0);
 assert.equal(DEFAULT_SETTINGS.setup.lastCheckedAt, 0);
 assert.equal(DEFAULT_SETTINGS.knowledgeBase.enabled, false);
-assert.equal(DEFAULT_SETTINGS.knowledgeBase.backend, "default");
+assert.equal(DEFAULT_SETTINGS.knowledgeBase.backend, "opencode");
 assert.equal(DEFAULT_SETTINGS.knowledgeBase.useCustomRulesFile, true);
 assert.equal(DEFAULT_SETTINGS.knowledgeBase.rulesFilePath, DEFAULT_KNOWLEDGE_BASE_RULES_FILE);
-assert.equal(CODEX_MEMORY_LITE_URL, "https://github.com/AKin-lvyifang/codex-memory-lite");
+assert.equal(MEMORY_LITE_URL, "https://github.com/AKin-lvyifang/codex-memory-lite");
 assert.equal(DEFAULT_SETTINGS.knowledgeBase.scheduleTime, "09:00");
 assert.equal(DEFAULT_SETTINGS.knowledgeBase.sessionId, "");
 assert.equal(DEFAULT_SETTINGS.knowledgeBase.initialization.status, "not-started");
@@ -690,7 +690,7 @@ const emptyAgentDocs = buildReviewDocuments("agent-chat", reviewEvidenceRange, c
 assert.ok(emptyAgentDocs.html.includes("<span class=\"pill\">提示词质量</span><h3>待观察</h3>"));
 
 const kbRouteItems = new Set<string>();
-const orphanStarted = routeKnowledgeBaseCodexNotification("item/started", { item: { id: "item-1" } }, {
+const orphanStarted = routeKnowledgeBaseNotification("item/started", { item: { id: "item-1" } }, {
   threadId: "thread-kb",
   turnId: "turn-kb",
   itemIds: kbRouteItems
@@ -698,19 +698,19 @@ const orphanStarted = routeKnowledgeBaseCodexNotification("item/started", { item
 assert.equal(orphanStarted.swallow, true);
 assert.equal(orphanStarted.rememberItemId, "item-1");
 kbRouteItems.add(orphanStarted.rememberItemId!);
-const orphanDelta = routeKnowledgeBaseCodexNotification("item/agentMessage/delta", { itemId: "item-1", delta: "报告" }, {
+const orphanDelta = routeKnowledgeBaseNotification("item/agentMessage/delta", { itemId: "item-1", delta: "报告" }, {
   threadId: "thread-kb",
   turnId: "turn-kb",
   itemIds: kbRouteItems
 });
 assert.equal(orphanDelta.swallow, true);
 assert.equal(orphanDelta.collectAssistantDelta, true);
-assert.equal(routeKnowledgeBaseCodexNotification("thread/tokenUsage/updated", { threadId: "thread-other" }, {
+assert.equal(routeKnowledgeBaseNotification("thread/tokenUsage/updated", { threadId: "thread-other" }, {
   threadId: "thread-kb",
   turnId: "turn-kb",
   itemIds: kbRouteItems
 }).swallow, false);
-assert.equal(routeKnowledgeBaseCodexNotification("error", { message: "failed" }, {
+assert.equal(routeKnowledgeBaseNotification("error", { message: "failed" }, {
   threadId: "thread-kb",
   turnId: "turn-kb",
   itemIds: kbRouteItems
@@ -1060,7 +1060,7 @@ assert.match(settingsStyles, /codex-process-kind-search\s+\.codex-process-icon/)
 assert.match(settingsStyles, /codex-process-kind-view\s+\.codex-process-icon/);
 assert.match(settingsStyles, /codex-process-kind-run\s+\.codex-process-icon/);
 
-const codexKnowledgeOptions = buildCodexKnowledgeTurnOptions({
+const codexKnowledgeOptions = buildKnowledgeTurnOptions({
   settings: normalizeSettingsData({
     settingsVersion: DEFAULT_SETTINGS.settingsVersion,
     defaultModel: "selected-kb-model",
@@ -1077,21 +1077,21 @@ assert.equal(codexKnowledgeOptions.reasoning, "medium");
 assert.equal(codexKnowledgeOptions.serviceTier, "fast");
 assert.equal(codexKnowledgeOptions.permission, "read-only");
 assert.deepEqual(codexKnowledgeOptions.writableRoots, undefined);
-const autoCodexKnowledgeOptions = buildCodexKnowledgeTurnOptions({
+const autoCodexKnowledgeOptions = buildKnowledgeTurnOptions({
   settings: normalizeSettingsData({ settingsVersion: DEFAULT_SETTINGS.settingsVersion, defaultModel: "" }).settings,
   availableModels: [{ model: "gpt-5.4", isDefault: true }, { model: "gpt-5.5" }],
   vaultPath: "/vault",
   permission: "read-only"
 });
 assert.equal(autoCodexKnowledgeOptions.model, "gpt-5.4");
-const emptyCodexKnowledgeOptions = buildCodexKnowledgeTurnOptions({
+const emptyCodexKnowledgeOptions = buildKnowledgeTurnOptions({
   settings: normalizeSettingsData({ settingsVersion: DEFAULT_SETTINGS.settingsVersion, defaultModel: "" }).settings,
   availableModels: [],
   vaultPath: "/vault",
   permission: "read-only"
 });
 assert.equal(emptyCodexKnowledgeOptions.model, "");
-const writableCodexKnowledgeOptions = buildCodexKnowledgeTurnOptions({
+const writableCodexKnowledgeOptions = buildKnowledgeTurnOptions({
   settings: normalizeSettingsData({ settingsVersion: DEFAULT_SETTINGS.settingsVersion, defaultModel: "", defaultReasoning: "xhigh" }).settings,
   availableModels: [{ model: "gpt-5.5", isDefault: true }],
   vaultPath: "/vault",
@@ -1183,12 +1183,12 @@ const invalidKnowledgeBaseSettings = normalizeSettingsData({
   opencode: { port: 1, textEnabled: false, imageEnabled: "yes", pdfEnabled: "yes" },
   knowledgeBase: { backend: "bad", rulesFilePath: "../bad/path.md", scheduleTime: "25:99", lastRunStatus: "bad" }
 }).settings;
-assert.equal(invalidKnowledgeBaseSettings.agentBackend, "codex-cli");
+assert.equal(invalidKnowledgeBaseSettings.agentBackend, "opencode");
 assert.equal(invalidKnowledgeBaseSettings.opencode.port, 1024);
 assert.equal(invalidKnowledgeBaseSettings.opencode.textEnabled, false);
 assert.equal(invalidKnowledgeBaseSettings.opencode.imageEnabled, false);
 assert.equal(invalidKnowledgeBaseSettings.opencode.pdfEnabled, false);
-assert.equal(invalidKnowledgeBaseSettings.knowledgeBase.backend, "default");
+assert.equal(invalidKnowledgeBaseSettings.knowledgeBase.backend, "opencode");
 assert.equal(invalidKnowledgeBaseSettings.knowledgeBase.useCustomRulesFile, false);
 assert.equal(invalidKnowledgeBaseSettings.knowledgeBase.rulesFilePath, "bad/path.md");
 assert.equal(invalidKnowledgeBaseSettings.knowledgeBase.scheduleTime, "09:00");
@@ -1851,7 +1851,7 @@ assert.equal(editorActionCandidateInvalidationReason("hello world", candidate), 
 assert.equal(editorActionCandidateInvalidationReason("hello world!", candidate), "document-changed");
 assert.equal(editorActionCandidateInvalidationReason("hello there", candidate), "original-text-changed");
 
-const customLaunch = buildCodexLaunchConfig({
+const customLaunch = buildOpenCodeLaunchConfig({
   proxyEnabled: false,
   proxyUrl: "",
   providerMode: "custom-api",
@@ -1875,7 +1875,7 @@ assert.ok(customLaunch.args.includes('model_providers.provider_demo.query_params
 assert.equal(customLaunch.args.join(" ").includes("test-key-value"), false);
 assert.equal(customLaunch.env.OBSIDIAN_CODEX_API_KEY_PROVIDER_DEMO, "test-key-value");
 
-const loginLaunch = buildCodexLaunchConfig({
+const loginLaunch = buildOpenCodeLaunchConfig({
   proxyEnabled: false,
   proxyUrl: "",
   providerMode: "codex-login",
@@ -1889,7 +1889,7 @@ const loginLaunch = buildCodexLaunchConfig({
   }
 });
 assert.deepEqual(loginLaunch.args, ["app-server", "--listen", "stdio://"]);
-const websocketDiagnostic = diagnoseCodexError(
+const websocketDiagnostic = diagnoseOpenCodeError(
   "failed to connect to websocket: No connection could be made because the target machine actively refused it. (os error 10061) url: wss://chatgpt.com/backend-api/codex/responses transport=\"responses_websocket\"",
   { model: "gpt-5.5", providerLabel: "Codex 登录态", proxyEnabled: false, proxyUrl: "http://127.0.0.1:7890" }
 );
@@ -1898,23 +1898,23 @@ assert.match(websocketDiagnostic.text, /Codex WebSocket 连接失败/);
 assert.match(websocketDiagnostic.text, /gpt-5\.5/);
 assert.match(websocketDiagnostic.text, /启用本地代理/);
 assert.match(websocketDiagnostic.text, /原始错误/);
-const proxyDiagnostic = diagnoseCodexError(
+const proxyDiagnostic = diagnoseOpenCodeError(
   "connect ECONNREFUSED 127.0.0.1:7890",
   { model: "", providerLabel: "Codex 登录态", proxyEnabled: true, proxyUrl: "http://127.0.0.1:7890" }
 );
 assert.equal(proxyDiagnostic.kind, "proxy");
 assert.match(proxyDiagnostic.text, /代理连接失败/);
 assert.match(proxyDiagnostic.text, /模型 自动/);
-assert.equal(diagnoseCodexError("request timed out after 60000ms").kind, "timeout");
-assert.equal(diagnoseCodexError("spawn codex ENOENT").kind, "missing-cli");
-assert.equal(diagnoseCodexError("app-server exited with code 1").kind, "app-server");
+assert.equal(diagnoseOpenCodeError("request timed out after 60000ms").kind, "timeout");
+assert.equal(diagnoseOpenCodeError("spawn codex ENOENT").kind, "missing-cli");
+assert.equal(diagnoseOpenCodeError("app-server exited with code 1").kind, "app-server");
 assert.match(formatJsonRpcError({ code: -32000, message: "model timeout", data: { status: 504 } }).message, /错误码：-32000/);
 assert.match(formatJsonRpcError({ code: -32000, message: "model timeout", data: { status: 504 } }).message, /status/);
 assert.match(formatOpenCodeError({ status: 504, data: { code: "upstream_timeout", message: "upstream timed out" } }), /错误码：upstream_timeout/);
 assert.match(formatOpenCodeError({ status: 504, data: { code: "upstream_timeout", message: "upstream timed out" } }), /状态：504/);
-assert.equal(diagnoseCodexError(websocketDiagnostic.text).text, websocketDiagnostic.text);
-assert.match(diagnoseCodexError("mystery failure").text, /mystery failure/);
-const missingCliEnglishDiagnostic = diagnoseCodexError("找不到 Codex CLI：/definitely/missing/codex。请先安装 Codex CLI，或在设置里填写正确路径。", {
+assert.equal(diagnoseOpenCodeError(websocketDiagnostic.text).text, websocketDiagnostic.text);
+assert.match(diagnoseOpenCodeError("mystery failure").text, /mystery failure/);
+const missingCliEnglishDiagnostic = diagnoseOpenCodeError("找不到 Codex CLI：/definitely/missing/codex。请先安装 Codex CLI，或在设置里填写正确路径。", {
   model: "",
   providerLabel: "Codex login",
   proxyEnabled: false,
@@ -1926,29 +1926,29 @@ assert.match(missingCliEnglishDiagnostic.text, /Codex CLI not found/);
 assert.match(missingCliEnglishDiagnostic.text, /Possible cause/);
 assert.match(missingCliEnglishDiagnostic.text, /Model Auto/);
 assert.doesNotMatch(missingCliEnglishDiagnostic.text, /可能原因|建议处理|当前上下文|原始错误/);
-assert.match(diagnoseCodexError(websocketDiagnostic.text, { language: "en" }).text, /Suggested fix/);
+assert.match(diagnoseOpenCodeError(websocketDiagnostic.text, { language: "en" }).text, /Suggested fix/);
 assert.throws(
-  () => resolveCodexCommand("/definitely/missing/codex"),
+  () => resolveOpenCodeCommand("/definitely/missing/codex"),
   /找不到 Codex CLI/
 );
 
 const codexAppCommand = "/Applications/Codex.app/Contents/Resources/codex";
-assert.equal(resolveCodexCommand("", {
+assert.equal(resolveOpenCodeCommand("", {
   home: "/Users/demo",
   envPath: "",
   exists: (candidate) => candidate === codexAppCommand
 }), codexAppCommand);
-assert.equal(resolveCodexCommand("~/bin/codex", {
+assert.equal(resolveOpenCodeCommand("~/bin/codex", {
   home: "/Users/demo",
   envPath: "",
   exists: (candidate) => candidate === "/Users/demo/bin/codex"
 }), "/Users/demo/bin/codex");
-assert.equal(resolveCodexCommand("", {
+assert.equal(resolveOpenCodeCommand("", {
   home: "/Users/demo",
   envPath: "/custom/bin",
   exists: (candidate) => candidate === "/custom/bin/codex"
 }), "/custom/bin/codex");
-assert.equal(resolveCodexCommand("", {
+assert.equal(resolveOpenCodeCommand("", {
   home: "C:\\Users\\demo",
   envPath: "",
   platform: "win32",
@@ -2002,7 +2002,7 @@ const setupMissingCodex = buildSetupCheck(DEFAULT_SETTINGS, setupDisconnectedSta
 assert.equal(setupMissingCodex.status, "blocking");
 assert.equal(setupMissingCodex.canStart, false);
 assert.ok(setupMissingCodex.requirements.some((item) => item.id === "codex-cli" && item.status === "blocking"));
-assert.ok(setupMissingCodex.requirements.find((item) => item.id === "codex-cli")?.actions.some((action) => action.value.includes("@openai/codex")));
+assert.ok(setupMissingCodex.requirements.find((item) => item.id === "codex-cli")?.actions?.some((action) => action.value.includes("@openai/codex")));
 
 const setupCodexInstalledNotLoggedIn = buildSetupCheck(DEFAULT_SETTINGS, setupDisconnectedStatus, {
   os: "darwin",
@@ -2013,7 +2013,7 @@ assert.equal(setupCodexInstalledNotLoggedIn.status, "blocking");
 assert.equal(setupCodexInstalledNotLoggedIn.canStart, false);
 assert.ok(setupCodexInstalledNotLoggedIn.requirements.some((item) => item.id === "codex-cli" && item.status === "ok"));
 assert.ok(setupCodexInstalledNotLoggedIn.requirements.some((item) => item.id === "codex-login" && item.status === "blocking"));
-assert.ok(setupCodexInstalledNotLoggedIn.requirements.find((item) => item.id === "codex-login")?.actions.some((action) => action.value === "codex"));
+assert.ok(setupCodexInstalledNotLoggedIn.requirements.find((item) => item.id === "codex-login")?.actions?.some((action) => action.value === "codex"));
 
 const setupCodexOnly = buildSetupCheck(DEFAULT_SETTINGS, setupConnectedStatus, {
   os: "darwin",
@@ -2584,8 +2584,8 @@ try {
   assert.ok(target.samplePaths.includes("journal/daily/2026-05/2026-05-09-周六.md"));
   assert.ok(target.templateDirectories.includes("journal/monthly/2026"));
   assert.equal(target.evidenceWindow.label, "2026-05-18 00:00 - 2026-05-19 06:00");
-  assert.ok(target.codexSessionGlobs.some((item) => item.endsWith("/2026/05/18/*.jsonl")));
-  assert.ok(target.codexSessionGlobs.some((item) => item.endsWith("/2026/05/19/*.jsonl")));
+  assert.ok(target.sessionGlobs.some((item) => item.endsWith("/2026/05/18/*.jsonl")));
+  assert.ok(target.sessionGlobs.some((item) => item.endsWith("/2026/05/19/*.jsonl")));
   await ensureJournalTargetFolders(journalVault, target);
   assert.equal(await fileExists(path.join(journalVault, "journal", "daily", "2026-05")), true);
   assert.equal(await fileExists(path.join(journalVault, "journal", "weekly")), true);
@@ -2593,20 +2593,6 @@ try {
     vaultPath: journalVault,
     userRequest: "写一下今天的日记。",
     target,
-    generatedAt: new Date(2026, 4, 18, 9, 1, 0)
-  });
-  assert.ok(journalPrompt.includes("Codex Obsidian Daily Journal"));
-  assert.ok(journalPrompt.includes("journal/daily/2026-05/2026-05-18-周一.md"));
-  assert.ok(journalPrompt.includes("不要写到扁平路径 journal/daily/YYYY-MM-DD.md"));
-  assert.ok(journalPrompt.includes("只做增量更新"));
-  assert.ok(journalPrompt.includes("2026-05-18 00:00 - 2026-05-19 06:00"));
-  assert.ok(journalPrompt.includes("不要再使用 00:00-02:30 旧口径"));
-  assert.ok(journalPrompt.includes("2026/05/19/*.jsonl"));
-  const openCodeJournalPrompt = buildKnowledgeBaseJournalPrompt({
-    vaultPath: journalVault,
-    userRequest: "写一下今天的日记。",
-    target,
-    backend: "opencode",
     openCodeHistory: {
       serverUrl: "http://127.0.0.1:4096",
       sessionsScanned: 3,
@@ -2625,10 +2611,10 @@ try {
     },
     generatedAt: new Date(2026, 4, 18, 9, 1, 0)
   });
-  assert.ok(openCodeJournalPrompt.includes("记录来源：OpenCode API"));
-  assert.ok(openCodeJournalPrompt.includes("session.list"));
-  assert.ok(openCodeJournalPrompt.includes("处理 journal 后端切换"));
-  assert.ok(openCodeJournalPrompt.includes("不要再读取 Codex sessions 当作主证据"));
+  assert.ok(journalPrompt.includes("记录来源：OpenCode API"));
+  assert.ok(journalPrompt.includes("session.list"));
+  assert.ok(journalPrompt.includes("处理 journal 后端切换"));
+  assert.ok(journalPrompt.includes("journal/daily/2026-05/2026-05-18-周一.md"));
   const yesterdayTarget = await resolveJournalDailyTarget(journalVault, "写日记：昨天的内容", new Date(2026, 4, 18, 9, 0, 0));
   assert.equal(yesterdayTarget.relativePath, "journal/daily/2026-05/2026-05-17-周日.md");
 } finally {
