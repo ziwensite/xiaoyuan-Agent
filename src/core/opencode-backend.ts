@@ -1,14 +1,11 @@
 import { spawn, type ChildProcess } from "child_process";
-import * as http from "node:http";
-import * as https from "node:https";
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2";
 import type { AgentBackend, AgentFileStatus, AgentModelInfo, AgentProfileInfo, AgentPromptOptions, AgentSessionOptions } from "../agent/types";
 import { formatOpenCodeError } from "./opencode-errors";
 import { flattenOpenCodeAgents, flattenOpenCodeModels, normalizeOpenCodeServerUrl, resolveOpenCodeCommand, toOpenCodePromptPart, type Provider } from "./opencode-models";
+import { OpenCodeApi } from "./opencode-api";
 
 export interface OpenCodeBackendOptions {
   cliPath: string;
-  serverUrl: string;
   autoStart: boolean;
   hostname: string;
   port: number;
@@ -55,7 +52,7 @@ const OPENCODE_START_TIMEOUT_MS = 8000;
 
 export class OpenCodeBackend implements AgentBackend {
   readonly kind = "opencode" as const;
-  private client: OpencodeClient | null = null;
+  private api: OpenCodeApi | null = null;
   private startedServer: StartedOpenCodeServer | null = null;
   private connectionInfo: OpenCodeConnectionInfo = {
     connected: false,
@@ -70,52 +67,41 @@ export class OpenCodeBackend implements AgentBackend {
   async connect(): Promise<void> {
     await this.disconnect();
     const errors: string[] = [];
-    let serverUrl = normalizeOpenCodeServerUrl(this.options.serverUrl, this.options.hostname, this.options.port);
-    let command = "";
+    let serverUrl = normalizeOpenCodeServerUrl(this.options.hostname, this.options.port);
+    let command = resolveOpenCodeCommand(this.options.cliPath);
     let startedServer: StartedOpenCodeServer | null = null;
 
-    if (!this.options.serverUrl.trim()) {
-      command = resolveOpenCodeCommand(this.options.cliPath);
-      const fallbackUrl = normalizeOpenCodeServerUrl("", this.options.hostname, this.options.port);
+    let connected = false;
+    try {
+      this.api = new OpenCodeApi({ baseUrl: serverUrl, directory: this.options.vaultPath });
+      await unwrapOpenCodeResult(this.api.health(), "OpenCode 连接失败");
+      connected = true;
+    } catch (e) {
+      this.api = null;
+    }
 
-      // 先尝试连接现有服务器
-      let connected = false;
+    if (!connected && this.options.autoStart) {
       try {
-        this.client = createOpencodeClient({ baseUrl: fallbackUrl, directory: this.options.vaultPath, fetch: nodeFetch });
-        await unwrapOpenCodeResult(this.client.global.health(), "OpenCode 连接失败");
-        serverUrl = fallbackUrl;
-        connected = true;
-      } catch (e) {
-        // 现有服务器连接失败，继续尝试启动新服务器
-        this.client = null;
+        startedServer = await startOpenCodeServer({
+          command,
+          hostname: this.options.hostname,
+          port: this.options.port,
+          cwd: this.options.vaultPath
+        });
+        serverUrl = startedServer.url;
+      } catch (startError) {
+        console.warn(`Failed to start OpenCode server: ${startError}`);
+        throw startError;
       }
-
-      // 如果没有连接成功且允许自动启动，则启动新服务器
-      if (!connected && this.options.autoStart) {
-        try {
-          startedServer = await startOpenCodeServer({
-            command,
-            hostname: this.options.hostname,
-            port: this.options.port,
-            cwd: this.options.vaultPath
-          });
-          serverUrl = startedServer.url;
-        } catch (startError) {
-          console.warn(`Failed to start OpenCode server: ${startError}`);
-          throw startError;
-        }
-      } else if (!connected) {
-        // 如果没有连接成功且不允许自动启动，则抛出错误
-        throw new Error("OpenCode server is not running and auto-start is disabled");
-      }
+    } else if (!connected) {
+      throw new Error("OpenCode server is not running and auto-start is disabled");
     }
 
-    // 确保 client 已创建
-    if (!this.client) {
-      this.client = createOpencodeClient({ baseUrl: serverUrl, directory: this.options.vaultPath, fetch: nodeFetch });
+    if (!this.api) {
+      this.api = new OpenCodeApi({ baseUrl: serverUrl, directory: this.options.vaultPath });
     }
 
-    const health = await unwrapOpenCodeResult(this.client.global.health(), "OpenCode 连接失败");
+    const health = await unwrapOpenCodeResult(this.api.health(), "OpenCode 连接失败");
     this.startedServer = startedServer;
     this.connectionInfo = {
       connected: true,
@@ -131,7 +117,7 @@ export class OpenCodeBackend implements AgentBackend {
       stopOpenCodeServer(this.startedServer.process);
       this.startedServer = null;
     }
-    this.client = null;
+    this.api = null;
     this.connectionInfo = { ...this.connectionInfo, connected: false };
   }
 
@@ -140,25 +126,25 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   async listModels(): Promise<AgentModelInfo[]> {
-    const client = this.requireClient();
-    const response = await unwrapOpenCodeResult(client.provider.list({ directory: this.options.vaultPath }), "读取 OpenCode 模型失败");
+    const api = this.requireClient();
+    const response = await unwrapOpenCodeResult(api.listProviders(), "读取 OpenCode 模型失败");
     return flattenOpenCodeModels(response?.all ?? []);
   }
 
   async listProviders(): Promise<Provider[]> {
-    const client = this.requireClient();
-    const response = await unwrapOpenCodeResult(client.provider.list({ directory: this.options.vaultPath }), "读取 OpenCode 提供商失败");
+    const api = this.requireClient();
+    const response = await unwrapOpenCodeResult(api.listProviders(), "读取 OpenCode 提供商失败");
     return response?.all ?? [];
   }
 
   async listAgents(): Promise<AgentProfileInfo[]> {
-    const client = this.requireClient();
-    const response = await unwrapOpenCodeResult(client.app.agents({ directory: this.options.vaultPath }), "读取 OpenCode Agent 失败");
+    const api = this.requireClient();
+    const response = await unwrapOpenCodeResult(api.listAgents(), "读取 OpenCode Agent 失败");
     return flattenOpenCodeAgents(response ?? []);
   }
 
   async collectHistoryMessages(input: { startMs: number; endMs: number; maxSessions?: number; maxMessages?: number; maxChars?: number }): Promise<OpenCodeHistorySnapshot> {
-    const client = this.requireClient();
+    const api = this.requireClient();
     const maxSessions = input.maxSessions ?? 100;
     const maxMessages = input.maxMessages ?? 80;
     const maxChars = input.maxChars ?? 60000;
@@ -169,11 +155,7 @@ export class OpenCodeBackend implements AgentBackend {
 
     for (let start = 0; start < maxSessions; start += pageSize) {
       const limit = Math.min(pageSize, maxSessions - start);
-      const page = await unwrapOpenCodeResult(client.session.list({
-        directory: this.options.vaultPath,
-        start,
-        limit
-      }), "读取 OpenCode 会话列表失败");
+      const page = await unwrapOpenCodeResult(api.listSessions({ start, limit }), "读取 OpenCode 会话列表失败");
       const sessions = Array.isArray(page) ? page : [];
       sessionsScanned += sessions.length;
       for (const session of sessions) {
@@ -197,9 +179,8 @@ export class OpenCodeBackend implements AgentBackend {
         truncated = true;
         break;
       }
-      const sessionMessages = await unwrapOpenCodeResult(client.session.messages({
+      const sessionMessages = await unwrapOpenCodeResult(api.getSessionMessages({
         sessionID: session.id,
-        directory: this.options.vaultPath,
         limit: 200
       }), `读取 OpenCode 会话消息失败：${session.title ?? session.id}`);
       const entries = Array.isArray(sessionMessages) ? sessionMessages : [];
@@ -238,10 +219,9 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   async startSession(options: AgentSessionOptions): Promise<{ sessionId: string; title: string }> {
-    const client = this.requireClient();
+    const api = this.requireClient();
     const model = options.model ?? defaultOpenCodeModel(this.options);
-    const session = await unwrapOpenCodeResult(client.session.create({
-      directory: this.options.vaultPath,
+    const session = await unwrapOpenCodeResult(api.createSession({
       title: options.title,
       agent: options.agent ?? this.options.agent,
       ...(model ? { model: { id: model.modelId, providerID: model.providerId } } : {})
@@ -253,10 +233,9 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   async sendPrompt(options: AgentPromptOptions): Promise<string> {
-    const client = this.requireClient();
-    const result = await unwrapOpenCodeResult(client.session.prompt({
+    const api = this.requireClient();
+    const result = await unwrapOpenCodeResult(api.sendPrompt({
       sessionID: options.sessionId,
-      directory: this.options.vaultPath,
       agent: options.agent ?? this.options.agent,
       ...(options.model ? { model: { providerID: options.model.providerId, modelID: options.model.modelId } } : {}),
       ...(options.system ? { system: options.system } : {}),
@@ -267,10 +246,9 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   async sendPromptAsync(options: AgentPromptOptions): Promise<void> {
-    const client = this.requireClient();
-    await unwrapOpenCodeResult(client.session.promptAsync({
+    const api = this.requireClient();
+    await unwrapOpenCodeResult(api.sendPromptAsync({
       sessionID: options.sessionId,
-      directory: this.options.vaultPath,
       agent: options.agent ?? this.options.agent,
       ...(options.model ? { model: { providerID: options.model.providerId, modelID: options.model.modelId } } : {}),
       ...(options.system ? { system: options.system } : {}),
@@ -280,14 +258,11 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   async abort(sessionId: string): Promise<void> {
-    await unwrapOpenCodeResult(this.requireClient().session.abort({
-      sessionID: sessionId,
-      directory: this.options.vaultPath
-    }), "取消 OpenCode 会话失败");
+    await unwrapOpenCodeResult(this.requireClient().abortSession(sessionId), "取消 OpenCode 会话失败");
   }
 
   async fileStatus(): Promise<AgentFileStatus[]> {
-    const response = await unwrapOpenCodeResult(this.requireClient().file.status({ directory: this.options.vaultPath }), "读取 OpenCode 文件状态失败");
+    const response = await unwrapOpenCodeResult(this.requireClient().fileStatus(), "读取 OpenCode 文件状态失败");
     return (response ?? []).map((file: any) => ({
       path: String(file.path ?? ""),
       status: String(file.status ?? ""),
@@ -296,9 +271,9 @@ export class OpenCodeBackend implements AgentBackend {
     }));
   }
 
-  private requireClient(): OpencodeClient {
-    if (!this.client) throw new Error("OpenCode 未连接");
-    return this.client;
+  private requireClient(): OpenCodeApi {
+    if (!this.api) throw new Error("OpenCode 未连接");
+    return this.api;
   }
 }
 
@@ -309,70 +284,12 @@ function openCodePromptText(parts: any[]): string {
     .join("");
 }
 
-async function unwrapOpenCodeResult<T>(promise: Promise<{ data: T; error: undefined } | { data: undefined; error: any }>, fallback: string): Promise<T> {
-  const result = await promise;
-  if (result.error) throw new Error(`${fallback}：${formatOpenCodeError(result.error)}`);
-  return result.data as T;
-}
-
-async function nodeFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-  const transport = url.protocol === "https:" ? https : http;
-  const body = await requestBodyToBuffer(init.body);
-  return new Promise<Response>((resolve, reject) => {
-    const request = transport.request(url, {
-      method: init.method ?? "GET",
-      headers: headersToNode(init.headers),
-      timeout: 120000
-    }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      response.on("end", () => {
-        resolve(new Response(Buffer.concat(chunks), {
-          status: response.statusCode ?? 0,
-          statusText: response.statusMessage,
-          headers: responseHeadersToWeb(response.headers)
-        }));
-      });
-    });
-    request.on("timeout", () => {
-      request.destroy(new Error("OpenCode 请求超时"));
-    });
-    request.on("error", reject);
-    if (body) request.write(body);
-    request.end();
-  });
-}
-
-async function requestBodyToBuffer(body: BodyInit | null | undefined): Promise<Buffer | null> {
-  if (!body) return null;
-  if (typeof body === "string") return Buffer.from(body);
-  if (body instanceof URLSearchParams) return Buffer.from(body.toString());
-  if (body instanceof ArrayBuffer) return Buffer.from(body);
-  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
-  if (typeof Blob !== "undefined" && body instanceof Blob) return Buffer.from(await body.arrayBuffer());
-  throw new Error("OpenCode 请求体格式暂不支持");
-}
-
-function headersToNode(headers: HeadersInit | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!headers) return result;
-  new Headers(headers).forEach((value, key) => {
-    result[key] = value;
-  });
-  return result;
-}
-
-function responseHeadersToWeb(headers: http.IncomingHttpHeaders): Headers {
-  const result = new Headers();
-  for (const [key, value] of Object.entries(headers)) {
-    if (Array.isArray(value)) {
-      for (const item of value) result.append(key, item);
-    } else if (typeof value === "string") {
-      result.set(key, value);
-    }
+async function unwrapOpenCodeResult<T>(promise: Promise<T>, fallback: string): Promise<T> {
+  try {
+    return await promise;
+  } catch (error: any) {
+    throw new Error(`${fallback}：${formatOpenCodeError(error)}`);
   }
-  return result;
 }
 
 function normalizeOpenCodeTimeMs(value: unknown): number {
@@ -467,7 +384,7 @@ async function startOpenCodeServer(input: { command: string; hostname: string; p
       detached: !isWindows
     });
   }
-  const fallbackUrl = normalizeOpenCodeServerUrl("", input.hostname, input.port);
+  const fallbackUrl = normalizeOpenCodeServerUrl(input.hostname, input.port);
   let output = "";
   const started = new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => {

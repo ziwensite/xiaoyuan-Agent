@@ -2,10 +2,48 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { pathToFileURL } from "node:url";
-import type { Agent, FilePartInput, Model, Provider, TextPartInput } from "@opencode-ai/sdk/v2";
 import type { AgentInputModality, AgentModelInfo, AgentProfileInfo, AgentPromptPart } from "../agent/types";
 
-export type { Provider };
+export interface Provider {
+  id: string;
+  name: string;
+  models: Record<string, Model>;
+  configured?: boolean;
+  env?: string[];
+  api?: string;
+}
+
+interface Model {
+  id: string;
+  name: string;
+  capabilities?: {
+    input?: {
+      text?: boolean;
+      image?: boolean;
+      pdf?: boolean;
+    };
+  };
+}
+
+interface Agent {
+  name: string;
+  description?: string;
+  mode: "subagent" | "primary" | "all";
+  native?: boolean;
+  hidden?: boolean;
+}
+
+interface TextPartInput {
+  type: "text";
+  text: string;
+}
+
+interface FilePartInput {
+  type: "file";
+  mime: string;
+  filename: string;
+  url: string;
+}
 
 export interface OpenCodeCommandResolveOptions {
   home?: string;
@@ -63,9 +101,7 @@ export function openCodeCommandCandidates(home: string, envPath: string, platfor
   ];
 }
 
-export function normalizeOpenCodeServerUrl(serverUrl: string, hostname: string, port: number): string {
-  const explicit = serverUrl.trim().replace(/\/$/, "");
-  if (explicit) return explicit;
+export function normalizeOpenCodeServerUrl(hostname: string, port: number): string {
   return `http://${hostname || "127.0.0.1"}:${port || 4096}`;
 }
 
@@ -85,10 +121,8 @@ export function modelInputModalities(model: Pick<Model, "capabilities"> | null |
 export function flattenOpenCodeModels(providers: Provider[]): AgentModelInfo[] {
   const models: AgentModelInfo[] = [];
   for (const provider of providers) {
-    // 只过滤掉明确标记为未配置的提供商
     if ((provider as any).configured === false) continue;
     for (const model of Object.values(provider.models ?? {})) {
-      // 只过滤掉明确标记为未启用的模型
       if ((model as any).enabled === false) continue;
       models.push({
         id: `${provider.id}/${model.id}`,
@@ -109,7 +143,7 @@ export function flattenOpenCodeAgents(agents: Agent[]): AgentProfileInfo[] {
       name: agent.name,
       displayName: agent.name,
       description: agent.description,
-      mode: agent.mode,
+      mode: agent.mode ?? "primary",
       native: agent.native,
       hidden: agent.hidden
     }))

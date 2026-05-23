@@ -82,7 +82,7 @@ export type ProviderMode = "custom-api";
 export type ResourceManagementTab = "plugins" | "mcp" | "skills";
 export type AgentBackendMode = "opencode";
 export type KnowledgeBaseBackendMode = "opencode";
-export type AssistantMode = "opencode" | "custom-api" | "hybrid";
+export type AssistantMode = "auto" | "opencode" | "custom-api";
 export type KnowledgeBaseRunStatus = "idle" | "running" | "success" | "failed" | "canceled";
 export type KnowledgeBaseInitStatus = "not-started" | "preview-ready" | "initialized" | "failed";
 export type KnowledgeBaseCaptureTarget = "inbox" | "raw-articles" | "raw-attachments" | "journal";
@@ -95,7 +95,6 @@ export type SettingsLanguage = "zh-CN" | "en";
 
 export interface OpenCodeSettings {
   cliPath: string;
-  serverUrl: string;
   autoStart: boolean;
   hostname: string;
   port: number;
@@ -413,7 +412,7 @@ export const DEFAULT_SETTINGS: XiaoyuanSettings = {
   settingsTab: "general",
   setup: { completedAt: 0, lastCheckedAt: 0, dismissedVersion: "" },
   agentBackend: "opencode",
-  assistantMode: "opencode",
+  assistantMode: "auto",
   proxyEnabled: false,
   proxyUrl: "http://127.0.0.1:7890",
   providerMode: "custom-api",
@@ -448,7 +447,6 @@ export const DEFAULT_SETTINGS: XiaoyuanSettings = {
   },
   opencode: {
     cliPath: "",
-    serverUrl: "",
     autoStart: true,
     hostname: "127.0.0.1",
     port: 4096,
@@ -979,7 +977,6 @@ function normalizeOpenCodeSettings(value: any): OpenCodeSettings {
   const fallback = DEFAULT_SETTINGS.opencode;
   return {
     cliPath: normalizeOptionalText(value?.cliPath),
-    serverUrl: normalizeOptionalText(value?.serverUrl),
     autoStart: typeof value?.autoStart === "boolean" ? value.autoStart : fallback.autoStart,
     hostname: normalizeText(value?.hostname, fallback.hostname),
     port: normalizePositiveInteger(value?.port, fallback.port, 1024, 65535),

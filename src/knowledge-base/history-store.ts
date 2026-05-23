@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { pluginDataDir, rawStorageDir } from "../core/raw-message-store";
 import { isKnowledgeBaseSession, type ChatMessage, type XiaoyuanSettings, type StoredSession } from "../settings/settings";
@@ -470,7 +470,13 @@ async function writeTextAtomic(file: string, text: string): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmp, text, "utf8");
-  await rename(tmp, file);
+  try {
+    await rename(tmp, file);
+  } catch (error) {
+    await unlink(tmp).catch(() => {});
+    if ((error as NodeJS.ErrnoException)?.code !== "EPERM") throw error;
+    await writeFile(file, text, "utf8");
+  }
 }
 
 async function fileSize(file: string): Promise<number> {

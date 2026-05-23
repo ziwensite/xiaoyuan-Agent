@@ -1123,7 +1123,6 @@ const knowledgeBaseSettings = normalizeSettingsData({
   agentBackend: "opencode",
   opencode: {
     cliPath: "~/bin/opencode",
-    serverUrl: "http://127.0.0.1:4096/",
     autoStart: false,
     hostname: "0.0.0.0",
     port: 5000,
@@ -1163,7 +1162,6 @@ const knowledgeBaseSettings = normalizeSettingsData({
 }).settings;
 assert.equal(knowledgeBaseSettings.settingsVersion, DEFAULT_SETTINGS.settingsVersion);
 assert.equal(knowledgeBaseSettings.agentBackend, "opencode");
-assert.equal(knowledgeBaseSettings.opencode.serverUrl, "http://127.0.0.1:4096/");
 assert.equal(knowledgeBaseSettings.opencode.autoStart, false);
 assert.equal(knowledgeBaseSettings.opencode.imageEnabled, true);
 assert.equal(knowledgeBaseSettings.opencode.pdfEnabled, true);

@@ -67,6 +67,8 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private openCodeAgentsLoaded = false;
   private openCodeAgentsLoading = false;
   private openCodeAgentsError = "";
+  private openCodeAutoRefreshScheduled = false;
+  private openCodeDetectStatus = "";
   private collapsedProviders: Record<string, boolean> = {};
 
   constructor(private readonly plugin: XiaoyuanPlugin) {
@@ -87,18 +89,19 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const copy = this.copy;
     containerEl.empty();
+    this.openCodeAutoRefreshScheduled = false;
     
     const mode = this.plugin.settings.assistantMode;
     
     // Mode selector - 智能助理模式选择
     this.decorateSetting(new Setting(containerEl)
       .setName(copy.mode.title)
-      .setDesc(mode === "opencode" ? copy.mode.opencodeDesc : (mode === "custom-api" ? copy.mode.customApiDesc : copy.mode.hybridDesc))
+      .setDesc(mode === "auto" ? copy.mode.autoDesc : (mode === "opencode" ? copy.mode.opencodeDesc : copy.mode.customApiDesc))
       .addDropdown(dropdown => {
         dropdown
+          .addOption("auto", copy.mode.auto)
           .addOption("opencode", copy.mode.opencode)
           .addOption("custom-api", copy.mode.customApi)
-          .addOption("hybrid", copy.mode.hybrid)
           .setValue(this.plugin.settings.assistantMode)
           .onChange(async (value: any) => {
             this.plugin.settings.assistantMode = value;
@@ -110,15 +113,12 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const status = this.plugin.lastStatus;
     const statusBox = containerEl.createDiv({ cls: "xy-settings-status" });
     
-    // 根据模式显示不同的连接状态
+    const activeProvider = getActiveApiProvider(this.plugin.settings);
     if (mode === "opencode") {
-      // OpenCode 模式
       this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
       this.addStatusRow(statusBox, "box", copy.status.currentModel, this.plugin.settings.opencode.modelId || this.plugin.settings.defaultModel || copy.common.unknown);
     } else if (mode === "custom-api") {
-      // API 模式
-      const activeProvider = getActiveApiProvider(this.plugin.settings);
       const apiConnected = activeProvider && activeProvider.baseUrl && activeProvider.apiKey;
       this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, apiConnected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
@@ -126,12 +126,12 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
         this.addStatusRow(statusBox, "box", copy.status.currentModel, activeProvider.model || copy.common.unknown);
       }
     } else {
-      // 混合模式
       this.addStatusRow(statusBox, "activity", copy.status.connectionStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
-      this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
-      const activeProvider = getActiveApiProvider(this.plugin.settings);
-      if (activeProvider) {
+      if (status?.connected) {
+        this.addStatusRow(statusBox, "box", copy.status.currentModel, this.plugin.settings.opencode.modelId || this.plugin.settings.defaultModel || copy.common.unknown);
+      } else if (activeProvider) {
+        this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
         this.addStatusRow(statusBox, "box", copy.status.currentModel, activeProvider.model || copy.common.unknown);
       }
     }
@@ -167,10 +167,10 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       return;
     }
 
-    this.renderGeneralSettings(containerEl, status);
+    this.renderGeneralSettings(containerEl, status, activeProvider);
   }
 
-  private renderGeneralSettings(containerEl: HTMLElement, status: OpenCodeStatusSnapshot | null): void {
+  private renderGeneralSettings(containerEl: HTMLElement, status: OpenCodeStatusSnapshot | null, activeProvider: ApiProviderConfig | null): void {
     const copy = this.copy;
     this.decorateSetting(new Setting(containerEl).setName(copy.general.settingsLanguage).setDesc(copy.general.settingsLanguageDesc).addDropdown((dropdown) => {
       for (const language of SETTINGS_LANGUAGE_OPTIONS) dropdown.addOption(language, copy.general.languageOptions[language]);
@@ -211,23 +211,15 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       })
     ), "blocks");
 
+    const settingsMode = this.plugin.settings.assistantMode;
+    const currentModel = settingsMode === "opencode" || (settingsMode === "auto" && status?.connected)
+      ? (this.plugin.settings.opencode.modelId || this.plugin.settings.defaultModel || copy.common.unknown)
+      : (activeProvider?.model || copy.common.unknown);
     this.decorateSetting(
       new Setting(containerEl)
       .setName(copy.general.defaultModel)
       .setDesc(copy.general.defaultModelDesc)
-      .addDropdown((dropdown) => {
-        dropdown.addOption("", copy.general.auto);
-        const modelChoices = (status?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName }));
-        for (const model of ensureModelChoices(modelChoices, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel)) {
-          dropdown.addOption(model.model, model.displayName || model.model);
-        }
-        dropdown.setValue(this.plugin.settings.defaultModel);
-        dropdown.onChange(async (value) => {
-          this.plugin.settings.defaultModel = value;
-          await this.plugin.saveSettings();
-          this.plugin.applyComposerDefaultsToView();
-        });
-      }),
+      .addText((text) => text.setValue(currentModel).setDisabled(true)),
       "box"
     );
 
@@ -530,8 +522,12 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       refresh.disabled = true;
       label.setText(copy.status.refreshing);
       const status = await this.plugin.ensureOpenCodeConnected(true);
-      if (status.connected) new Notice(copy.status.refreshSuccess(status.accountLabel));
-      else new Notice(copy.status.refreshFailed(status.errors[0] ?? copy.common.unknown));
+      if (status.connected) {
+        await this.refreshOpenCodeRuntimeOptions();
+        new Notice(copy.status.refreshSuccess(status.accountLabel));
+      } else {
+        new Notice(copy.status.refreshFailed(status.errors[0] ?? copy.common.unknown));
+      }
       this.display();
     };
   }
@@ -573,6 +569,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const wrapper = container.createDiv({ cls: "xy-api-provider-manager" });
 
     const opencode = this.plugin.settings.opencode;
+    const openCodePathPlaceholder = detectOpenCodeCommand(opencode.cliPath) || copy.knowledge.opencodePathPlaceholder;
     const openCodeSection = wrapper.createDiv({ cls: "xy-editor-actions-section" });
     const openCodeHeader = openCodeSection.createDiv({ cls: "xy-resource-manager-header" });
     const openCodeTitle = openCodeHeader.createDiv({ cls: "xy-resource-manager-title" });
@@ -580,15 +577,10 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     setIcon(openCodeIcon, "terminal-square");
     openCodeTitle.createSpan({ text: copy.providers.opencodeMode });
     
-    openCodeSection.createDiv({ cls: "xy-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
-    this.addProviderText(openCodeSection, copy.knowledge.opencodePath, opencode.cliPath, "/opt/homebrew/bin/opencode", async (value) => {
+    this.addProviderText(openCodeSection, copy.knowledge.opencodePath, opencode.cliPath, openCodePathPlaceholder, async (value) => {
       opencode.cliPath = value.trim();
       await this.plugin.saveSettings();
       this.display();
-    });
-    this.addProviderText(openCodeSection, copy.knowledge.serverUrl, opencode.serverUrl, "http://127.0.0.1:4096", async (value) => {
-      opencode.serverUrl = value.trim().replace(/\/$/, "");
-      await this.plugin.saveSettings();
     });
     this.decorateSetting(new Setting(openCodeSection).setName(copy.knowledge.autoStartServer).addToggle((toggle) =>
       toggle.setValue(opencode.autoStart).onChange(async (value) => {
@@ -596,6 +588,22 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
         await this.plugin.saveSettings();
       })
     ), "power");
+    const openCodeActions = openCodeSection.createDiv({ cls: "xy-api-provider-actions" });
+    if (this.openCodeDetectStatus) {
+      const cls = this.openCodeDetectStatus.startsWith("检测成功") || this.openCodeDetectStatus.startsWith("Detection:")
+        ? "xy-opencode-detect-success"
+        : "xy-opencode-detect-fail";
+      openCodeActions.createDiv({ cls, text: this.openCodeDetectStatus });
+    }
+    const testOpenCode = openCodeActions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
+    testOpenCode.onclick = async () => {
+      await this.refreshOpenCodeRuntimeOptions();
+      this.display();
+    };
+    if (!this.openCodeModelsLoaded && !this.openCodeModelsLoading && !this.openCodeAutoRefreshScheduled) {
+      this.openCodeAutoRefreshScheduled = true;
+      queueMicrotask(() => void this.refreshOpenCodeRuntimeOptions());
+    }
     this.addProviderText(openCodeSection, copy.opencode.host, opencode.hostname, "127.0.0.1", async (value) => {
       opencode.hostname = value.trim() || "127.0.0.1";
       await this.plugin.saveSettings();
@@ -622,12 +630,6 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     if (opencode.lastError) openCodeSection.createDiv({ cls: "xy-resource-error", text: opencode.lastError });
     if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "xy-resource-error", text: this.openCodeModelsError });
     if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "xy-resource-error", text: this.openCodeAgentsError });
-    const openCodeActions = openCodeSection.createDiv({ cls: "xy-api-provider-actions" });
-    const testOpenCode = openCodeActions.createEl("button", { cls: "xy-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
-    testOpenCode.onclick = async () => {
-      await this.refreshOpenCodeRuntimeOptions();
-      this.display();
-    };
 
     const customApiSection = wrapper.createDiv({ cls: "xy-editor-actions-section" });
     const customApiHeader = customApiSection.createDiv({ cls: "xy-resource-manager-header" });
@@ -990,74 +992,94 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private addOpenCodeModelPicker(container: HTMLElement): void {
     const copy = this.copy;
     const opencode = this.plugin.settings.opencode;
-    const currentValue = opencode.providerId && opencode.modelId
-      ? openCodeModelChoiceValue({ providerId: opencode.providerId, modelId: opencode.modelId })
-      : "";
     const field = container.createDiv({ cls: "xy-api-provider-field xy-opencode-model-field" });
     field.createDiv({ cls: "xy-api-provider-label", text: copy.opencode.model });
-    const controls = field.createDiv({ cls: "xy-opencode-model-picker" });
-    const values = new Set(this.openCodeModelChoices.map((model) => openCodeModelChoiceValue(model)));
+    const controls = field.createDiv({ cls: "xy-opencode-model-picker xy-opencode-model-custom" });
 
-    if (this.openCodeModelsLoaded && this.openCodeModelChoices.length) {
-      const select = controls.createEl("select", {
-        cls: "xy-api-provider-input xy-opencode-model-select",
-        attr: { "aria-label": copy.opencode.chooseModel, title: copy.opencode.chooseModel }
-      }) as HTMLSelectElement;
-      if (!currentValue) {
-        select.createEl("option", { text: copy.opencode.chooseModel, value: "" });
-      } else if (!values.has(currentValue)) {
-        select.createEl("option", { text: copy.opencode.currentModelMissing(opencode.providerId, opencode.modelId), value: currentValue });
-      }
+    const selectedModel = this.openCodeModelChoices.find((model) => model.providerId === opencode.providerId && model.modelId === opencode.modelId);
 
-      // Group models by provider using optgroup
-      for (const provider of this.openCodeProviders) {
-        // Skip unconfigured providers
-        if ((provider as any).configured === false) continue;
-        
-        const providerId = provider.id;
-        const providerName = provider.name || providerId;
-        const providerModels = this.openCodeModelChoices.filter(model => model.providerId === providerId);
-        
-        if (providerModels.length > 0) {
-          const optgroup = select.createEl("optgroup", { attr: { label: providerName } });
-          for (const model of providerModels) {
-            optgroup.createEl("option", { text: model.displayName.split(" · ").slice(1).join(" · "), value: openCodeModelChoiceValue(model) });
-          }
-        }
-      }
-
-      select.value = currentValue && (values.has(currentValue) || opencode.providerId) ? currentValue : "";
-      select.onchange = async () => {
-        const parsed = parseOpenCodeModelChoiceValue(select.value);
-        if (!parsed) return;
-        const selected = this.openCodeModelChoices.find((model) => model.providerId === parsed.providerId && model.modelId === parsed.modelId);
-        if (!selected) return;
-        this.applyOpenCodeModelChoice(selected);
-        await this.plugin.saveSettings(true);
-        this.display();
-      };
-    } else {
+    if (!this.openCodeModelsLoaded || !this.openCodeModelChoices.length) {
       controls.createDiv({
         cls: "xy-resource-note xy-opencode-model-empty",
         text: this.openCodeModelsLoading ? copy.opencode.modelLoading : copy.opencode.refreshModelHint
       });
+      return;
     }
 
-    const refresh = controls.createEl("button", {
-      cls: "xy-resource-tab",
-      text: this.openCodeModelsLoading ? copy.common.loading : copy.opencode.refreshModels,
-      attr: { type: "button" }
+    const input = controls.createDiv({
+      cls: "xy-api-provider-input" + (selectedModel ? "" : " xy-opencode-model-placeholder"),
+      text: selectedModel?.displayName || copy.opencode.chooseModel,
+      attr: { "aria-label": copy.opencode.chooseModel, title: copy.opencode.chooseModel }
     });
-    refresh.disabled = this.openCodeModelsLoading;
-    refresh.onclick = () => void this.refreshOpenCodeModels();
 
-    const selectedModel = this.openCodeModelChoices.find((model) => model.providerId === opencode.providerId && model.modelId === opencode.modelId);
-    field.createDiv({
-      cls: "xy-resource-note xy-opencode-model-note",
-      text: selectedModel
-        ? copy.opencode.selectedModel(selectedModel.displayName, openCodeModelCapabilityLabel(selectedModel, this.plugin.settings.settingsLanguage))
-        : copy.opencode.modelNote
-    });
+    input.onclick = () => {
+      const existing = document.querySelector(".xy-composer-popover");
+      if (existing) { existing.remove(); return; }
+
+      const popover = createDiv({ cls: "xy-composer-popover" });
+      document.body.appendChild(popover);
+      popover.style.position = "fixed";
+
+      const close = () => { popover.remove(); };
+
+      // ── Provider-grouped model list (no header, directly the list) ──
+      const modelSection = popover.createDiv({ cls: "xy-composer-section" });
+      modelSection.createDiv({ cls: "xy-composer-section-label", text: copy.opencode.model });
+
+      const sorted = [...this.openCodeProviders].filter((p) => (p as any).configured !== false);
+      const BUILTIN_PREFIXES = ["opencode", "open-code", "xai", "local", "builtin"];
+      const builtin: typeof sorted = [];
+      const external: typeof sorted = [];
+      for (const p of sorted) {
+        (BUILTIN_PREFIXES.some((pre) => p.id.toLowerCase().startsWith(pre) || p.name.toLowerCase().startsWith(pre)) ? builtin : external).push(p);
+      }
+      external.sort((a, b) => a.name.localeCompare(b.name));
+      const ordered = [...builtin, ...external];
+      const list = popover.createDiv({ cls: "xy-composer-section" });
+
+      for (const provider of ordered) {
+        const providerModels = this.openCodeModelChoices.filter(model => model.providerId === provider.id);
+        if (!providerModels.length) continue;
+
+        const providerRow = list.createDiv({ cls: "xy-opencode-provider-row" });
+        const providerHeader = providerRow.createDiv({ cls: "xy-opencode-provider-header" });
+        providerHeader.createSpan({ cls: "xy-opencode-provider-name", text: provider.name || provider.id });
+
+        const modelList = providerRow.createDiv({ cls: "xy-opencode-model-list" });
+        modelList.style.display = "none";
+        providerHeader.onclick = (e) => {
+          e.stopPropagation();
+          modelList.style.display = modelList.style.display === "none" ? "" : "none";
+        };
+
+        for (const model of providerModels) {
+          const modelRow = modelList.createDiv({ cls: "xy-opencode-model-row" });
+          modelRow.createSpan({ text: model.displayName.split(" · ").slice(1).join(" · ") || model.modelId });
+          modelRow.onclick = async (e) => {
+            e.stopPropagation();
+            this.applyOpenCodeModelChoice(model);
+            await this.plugin.saveSettings(true);
+            close();
+            this.display();
+          };
+          if (selectedModel && model.providerId === selectedModel.providerId && model.modelId === selectedModel.modelId) {
+            modelRow.addClass("xy-opencode-model-active");
+          }
+        }
+      }
+
+      // ── Center popover ──
+      const rect = popover.getBoundingClientRect();
+      popover.style.left = `${Math.max(8, (window.innerWidth - rect.width) / 2)}px`;
+      popover.style.top = `${Math.max(8, (window.innerHeight - rect.height) / 2)}px`;
+
+      const closeHandler = (e: MouseEvent) => {
+        if (!popover.contains(e.target as Node)) { close(); document.removeEventListener("mousedown", closeHandler, true); }
+      };
+      document.addEventListener("mousedown", closeHandler, true);
+      popover.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+      setTimeout(() => popover.focus());
+    };
   }
 
   private addOpenCodeAgentPicker(container: HTMLElement): void {
@@ -1106,14 +1128,6 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       };
     }
 
-    const refresh = controls.createEl("button", {
-      cls: "xy-resource-tab",
-      text: this.openCodeAgentsLoading ? copy.common.loading : copy.opencode.refreshAgent,
-      attr: { type: "button" }
-    });
-    refresh.disabled = this.openCodeAgentsLoading;
-    refresh.onclick = () => void this.refreshOpenCodeAgents();
-
     const selectedAgent = this.openCodeAgentChoices.find((agent) => agent.name === currentValue);
     field.createDiv({
       cls: "xy-resource-note xy-opencode-model-note",
@@ -1123,14 +1137,6 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
           ? copy.opencode.agentMissing(currentValue)
           : copy.opencode.agentHint
     });
-  }
-
-  private async refreshOpenCodeModels(): Promise<void> {
-    await this.refreshOpenCodeRuntimeOptions({ models: true, agents: false });
-  }
-
-  private async refreshOpenCodeAgents(): Promise<void> {
-    await this.refreshOpenCodeRuntimeOptions({ models: false, agents: true });
   }
 
   private async refreshOpenCodeRuntimeOptions(options: { models?: boolean; agents?: boolean } = { models: true, agents: true }): Promise<void> {
@@ -1176,12 +1182,19 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       opencode.lastConnectedAt = Date.now();
       opencode.lastError = "";
       await this.plugin.saveSettings(true);
+      await this.plugin.ensureOpenCodeConnected(true, { silent: true });
+      if (shouldLoadModels) {
+        this.openCodeDetectStatus = copy.opencode.detectSuccess(this.openCodeModelChoices.length, shouldLoadAgents ? this.openCodeAgentChoices.length : 0);
+      } else if (shouldLoadAgents) {
+        this.openCodeDetectStatus = copy.opencode.detectSuccess(0, this.openCodeAgentChoices.length);
+      }
       const notices: string[] = [];
       if (shouldLoadModels) notices.push(copy.opencode.modelsCount(this.openCodeModelChoices.length));
       if (shouldLoadAgents) notices.push(copy.opencode.agentsCount(this.openCodeAgentChoices.length));
       new Notice(copy.opencode.readSuccess(notices));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      this.openCodeDetectStatus = copy.opencode.detectFailed;
       if (shouldLoadModels) this.openCodeModelsError = message;
       if (shouldLoadAgents) this.openCodeAgentsError = message;
       this.plugin.settings.opencode.lastError = message;
@@ -1202,6 +1215,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     opencode.textEnabled = model.inputModalities.includes("text");
     opencode.imageEnabled = model.inputModalities.includes("image");
     opencode.pdfEnabled = model.inputModalities.includes("pdf");
+    this.plugin.settings.defaultModel = model.modelId;
   }
 
   private addKnowledgeBaseRulesFilePicker(container: HTMLElement): void {

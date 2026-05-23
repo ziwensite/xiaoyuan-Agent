@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { ItemView, MarkdownView, Menu, Modal, normalizePath, Notice, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import type XiaoyuanPlugin from "../main";
+import type { AgentModelInfo } from "../agent/types";
 import type { ChatMessage, DiffSummary, StoredAttachment, StoredSession } from "../settings/settings";
 import { DEFAULT_SETTINGS, ensureKnowledgeBaseSession, ensureModelChoices, filterEnabledSkills, getActiveApiProvider, getApiProviderModels, isKnowledgeBaseSession, newId, providerConnectionLabel, resolveEditorActionModeConfig } from "../settings/settings";
 import type {
@@ -1755,7 +1756,7 @@ export class XiaoyuanView extends ItemView {
       modelButton.createSpan({ cls: "xy-composer-model-text", text: this.currentComposerSummary() });
       const chevron = modelButton.createSpan({ cls: "xy-composer-chevron" });
       setIcon(chevron, "chevron-down");
-      modelButton.onclick = (event) => this.openModelMenu(event);
+      modelButton.onclick = async (event) => { await this.openModelMenu(event); };
 
       const micButton = this.createComposerIconButton(right, "mic", "语音输入");
       micButton.onclick = () => new Notice("语音输入暂未接入");
@@ -2095,91 +2096,147 @@ export class XiaoyuanView extends ItemView {
     this.focusInput();
   }
 
-  private openModelMenu(event: MouseEvent): void {
+  private async openModelMenu(event: MouseEvent): Promise<void> {
     event.preventDefault();
-    const menu = new Menu();
+
     const providerModels = this.activeProviderModels();
-    const effectiveModel = this.effectiveModel();
-    const models = providerModels.length
-      ? ensureModelChoices([], ...providerModels)
-      : ensureModelChoices((this.plugin.lastStatus?.models ?? []).map((m) => ({ id: m.modelId, model: m.modelId, displayName: m.displayName })), this.selectedModel, this.plugin.settings.defaultModel, DEFAULT_SETTINGS.defaultModel);
-    menu.addItem((item) => item.setTitle("模型").setIsLabel(true));
-    if (!providerModels.length) {
-      menu.addItem((item) =>
-        item
-          .setTitle("自动")
-          .setIcon("wand-sparkles")
-          .setChecked(!this.selectedModel)
-          .onClick(() => {
-            this.selectedModel = "";
-            this.persistComposerDefaults();
-            this.renderToolbar();
-          })
-      );
-    }
-    if (models.length) {
-      for (const model of models) {
-        menu.addItem((item) =>
-          item
-            .setTitle(model.displayName || model.model)
-            .setIcon("box")
-            .setChecked(effectiveModel === model.model)
-            .onClick(() => {
-              this.selectedModel = model.model;
-              this.persistComposerDefaults();
-              this.renderToolbar();
-            })
-        );
+    const popover = createDiv({ cls: "xy-composer-popover" });
+    document.body.appendChild(popover);
+    popover.style.position = "fixed";
+
+    const close = () => { popover.remove(); };
+    const rerender = () => { close(); this.renderToolbar(); };
+
+    // ── Model section ──
+    const modelSection = popover.createDiv({ cls: "xy-composer-section" });
+    modelSection.createDiv({ cls: "xy-composer-section-label", text: "模型" });
+
+    if (providerModels.length) {
+      // Custom API mode: flat list
+      const allModels = ensureModelChoices([], ...providerModels);
+      for (const m of allModels) {
+        const row = modelSection.createDiv({ cls: "xy-composer-option-row" });
+        row.createSpan({ text: m.displayName || m.model });
+        if (this.effectiveModel() === m.model) row.addClass("xy-composer-option-active");
+        row.onclick = () => {
+          this.selectedModel = m.model;
+          this.persistComposerDefaults();
+          rerender();
+        };
       }
     } else {
-      menu.addItem((item) => item.setTitle(this.selectedModel || "自动").setIcon("box").setChecked(true));
-    }
-    menu.addSeparator();
-    menu.addItem((item) => item.setTitle("思考强度").setIsLabel(true));
-    for (const effort of ["low", "medium", "high", "xhigh"] as ReasoningEffort[]) {
-      menu.addItem((item) =>
-        item
-          .setTitle(labelFor(effort))
-          .setIcon("brain")
-          .setChecked(this.selectedReasoning === effort)
-          .onClick(() => {
-            this.selectedReasoning = effort;
+      // OpenCode mode: provider-grouped collapsible model list
+      const rawModels = this.plugin.lastStatus?.models ?? [];
+
+      // Group models by provider
+      const providerMap = new Map<string, { name: string; models: AgentModelInfo[] }>();
+      for (const m of rawModels) {
+        const entry = providerMap.get(m.providerId) ?? { name: m.displayName.includes(" · ") ? m.displayName.split(" · ")[0] : m.providerId, models: [] };
+        entry.models.push(m);
+        providerMap.set(m.providerId, entry);
+      }
+      const providerEntries = [...providerMap.entries()].map(([id, entry]) => ({ id, name: entry.name, models: entry.models }));
+      const BUILTIN_PREFIXES = ["opencode", "open-code", "xai", "local", "builtin"];
+      const builtin: typeof providerEntries = [];
+      const external: typeof providerEntries = [];
+      for (const p of providerEntries) {
+        (BUILTIN_PREFIXES.some((pre) => p.name.toLowerCase().startsWith(pre) || p.id.toLowerCase().startsWith(pre)) ? builtin : external).push(p);
+      }
+      external.sort((a, b) => a.name.localeCompare(b.name));
+      const orderedProviders = [...builtin, ...external];
+      const list = modelSection.createDiv({ cls: "xy-opencode-model-list" });
+
+      for (const provider of orderedProviders) {
+        const providerRow = list.createDiv({ cls: "xy-opencode-provider-row" });
+        const providerHeader = providerRow.createDiv({ cls: "xy-opencode-provider-header" });
+        providerHeader.createSpan({ cls: "xy-opencode-provider-name", text: provider.name });
+
+        const modelList = providerRow.createDiv({ cls: "xy-opencode-model-list" });
+        modelList.style.display = "none";
+
+        providerHeader.onclick = (e) => {
+          e.stopPropagation();
+          modelList.style.display = modelList.style.display === "none" ? "" : "none";
+        };
+
+        for (const model of provider.models) {
+          const modelRow = modelList.createDiv({ cls: "xy-opencode-model-row" });
+          modelRow.createSpan({ text: model.displayName.split(" · ").slice(1).join(" · ") || model.modelId });
+          modelRow.onclick = (e) => {
+            e.stopPropagation();
+            this.plugin.settings.opencode.providerId = model.providerId;
+            this.plugin.settings.opencode.modelId = model.modelId;
+            this.selectedModel = model.modelId;
             this.persistComposerDefaults();
+            close();
             this.renderToolbar();
-          })
-      );
+          };
+          if (model.modelId === this.effectiveModel()) modelRow.addClass("xy-opencode-model-active");
+        }
+      }
     }
-    menu.addSeparator();
-    menu.addItem((item) => item.setTitle("速度").setIsLabel(true));
-    for (const tier of ["standard", "fast", "flex"] as ServiceTierChoice[]) {
-      menu.addItem((item) =>
-        item
-          .setTitle(labelFor(tier))
-          .setIcon("gauge")
-          .setChecked(this.selectedServiceTier === tier)
-          .onClick(() => {
-            this.selectedServiceTier = tier;
-            this.persistComposerDefaults();
-            this.renderToolbar();
-          })
-      );
+
+    // ── Reasoning section ──
+    {
+      const section = popover.createDiv({ cls: "xy-composer-section" });
+      section.createDiv({ cls: "xy-composer-section-label", text: "思考强度" });
+      const options = section.createDiv({ cls: "xy-composer-options" });
+      for (const effort of ["low", "medium", "high", "xhigh"] as ReasoningEffort[]) {
+        const btn = options.createEl("button", { cls: "xy-composer-option-btn", text: labelFor(effort), attr: { type: "button" } });
+        if (this.selectedReasoning === effort) btn.addClass("xy-composer-option-active");
+        btn.onclick = () => {
+          this.selectedReasoning = effort;
+          this.persistComposerDefaults();
+          rerender();
+        };
+      }
     }
-    menu.addSeparator();
-    menu.addItem((item) => item.setTitle("模式").setIsLabel(true));
-    for (const mode of ["agent", "plan"] as UiMode[]) {
-      menu.addItem((item) =>
-        item
-          .setTitle(labelFor(mode))
-          .setIcon("route")
-          .setChecked(this.selectedMode === mode)
-          .onClick(() => {
-            this.selectedMode = mode;
-            this.persistComposerDefaults();
-            this.renderToolbar();
-          })
-      );
+
+    // ── Speed section ──
+    {
+      const section = popover.createDiv({ cls: "xy-composer-section" });
+      section.createDiv({ cls: "xy-composer-section-label", text: "速度" });
+      const options = section.createDiv({ cls: "xy-composer-options" });
+      for (const tier of ["standard", "fast", "flex"] as ServiceTierChoice[]) {
+        const btn = options.createEl("button", { cls: "xy-composer-option-btn", text: labelFor(tier), attr: { type: "button" } });
+        if (this.selectedServiceTier === tier) btn.addClass("xy-composer-option-active");
+        btn.onclick = () => {
+          this.selectedServiceTier = tier;
+          this.persistComposerDefaults();
+          rerender();
+        };
+      }
     }
-    menu.showAtMouseEvent(event);
+
+    // ── Mode section ──
+    {
+      const section = popover.createDiv({ cls: "xy-composer-section" });
+      section.createDiv({ cls: "xy-composer-section-label", text: "模式" });
+      const options = section.createDiv({ cls: "xy-composer-options" });
+      for (const m of ["agent", "plan"] as UiMode[]) {
+        const btn = options.createEl("button", { cls: "xy-composer-option-btn", text: labelFor(m), attr: { type: "button" } });
+        if (this.selectedMode === m) btn.addClass("xy-composer-option-active");
+        btn.onclick = () => {
+          this.selectedMode = m;
+          this.persistComposerDefaults();
+          rerender();
+        };
+      }
+    }
+
+    // ── Position above button (always pop up) ──
+    const btnRect = (event.currentTarget as HTMLElement)?.getBoundingClientRect() ?? { top: 0, bottom: 0, right: 0, width: 0, height: 0 };
+    popover.style.right = `${window.innerWidth - btnRect.right}px`;
+    popover.style.minWidth = `${Math.max(btnRect.width, 220)}px`;
+    const gap = 4;
+    popover.style.bottom = `${window.innerHeight - btnRect.top + gap}px`;
+
+    const closeHandler = (e: MouseEvent) => {
+      if (!popover.contains(e.target as Node)) { close(); document.removeEventListener("mousedown", closeHandler, true); }
+    };
+    document.addEventListener("mousedown", closeHandler, true);
+    popover.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    setTimeout(() => popover.focus());
   }
 
   private currentComposerSummary(): string {
@@ -3215,7 +3272,9 @@ export class XiaoyuanView extends ItemView {
   }
 
   private activeProviderModels(): string[] {
-    if (this.plugin.settings.providerMode !== "custom-api") return [];
+    const mode = this.plugin.settings.assistantMode;
+    const useApi = mode === "custom-api" || (mode === "auto" && !this.plugin.lastStatus?.connected);
+    if (!useApi) return [];
     const provider = getActiveApiProvider(this.plugin.settings);
     return provider ? getApiProviderModels(provider) : [];
   }

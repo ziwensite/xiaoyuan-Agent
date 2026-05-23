@@ -6,7 +6,7 @@ const isWatch = process.argv[2] === "watch";
 
 const context = await esbuild.context({
   banner: {
-    js: "/* Codex for Obsidian */"
+    js: "/* 小元 for Obsidian */"
   },
   entryPoints: ["src/main.ts"],
   bundle: true,

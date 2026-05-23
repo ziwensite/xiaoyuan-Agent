@@ -6,7 +6,9 @@ import { clearLegacyChatWorkspaceDefaults, ensureKnowledgeBaseSession, getActive
 import { XiaoyuanAgentSettingTab } from "./settings/settings-tab";
 import { confirmModal, requestUserInputModal } from "./ui/modals";
 import { XiaoyuanView, VIEW_TYPE_XIAOYUAN } from "./ui/xiaoyuan-view";
+import { OpenCodeApi } from "./core/opencode-api";
 import { OpenCodeBackend } from "./core/opencode-backend";
+import { detectOpenCodeCommand } from "./core/opencode-models";
 import { EditorActionController } from "./editor-actions/controller";
 import { AGENTS_RULES_FILE, DEFAULT_KNOWLEDGE_BASE_RULES_FILE } from "./knowledge-base/constants";
 import {
@@ -181,19 +183,41 @@ export default class XiaoyuanPlugin extends Plugin {
   async ensureOpenCodeConnected(force = false, options: { silent?: boolean } = {}): Promise<OpenCodeStatusSnapshot> {
     if (this.lastStatus?.connected && !force) return this.lastStatus;
 
-    // 根据模式设置初始账户标签
-    let initialAccountLabel: string;
-    if (this.settings.assistantMode === "custom-api") {
+    const mode = this.settings.assistantMode;
+    const lang = this.settings.settingsLanguage;
+
+    // ── custom-api mode: skip OpenCode entirely ──
+    if (mode === "custom-api") {
       const activeProvider = getActiveApiProvider(this.settings);
-      if (activeProvider) {
-        initialAccountLabel = this.settings.settingsLanguage === "en" 
-          ? `Custom API: ${activeProvider.name}` 
-          : `自定义 API：${activeProvider.name}`;
-      } else {
-        initialAccountLabel = this.settings.settingsLanguage === "en" ? "No API provider" : "未配置 API";
-      }
+      const label = activeProvider
+        ? (lang === "en" ? `Custom API: ${activeProvider.name}` : `自定义 API：${activeProvider.name}`)
+        : (lang === "en" ? "No API provider" : "未配置 API");
+      this.lastStatus = {
+        connected: false, accountLabel: label, serverUrl: "",
+        models: [], agents: [], skills: [], mcpServers: [], errors: []
+      };
+      return this.lastStatus;
+    }
+
+    // ── auto mode: detect OpenCode first ──
+    if (mode === "auto" && !detectOpenCodeCommand(this.settings.opencode.cliPath)) {
+      const activeProvider = getActiveApiProvider(this.settings);
+      const label = activeProvider
+        ? (lang === "en" ? `Custom API: ${activeProvider.name}` : `自定义 API：${activeProvider.name}`)
+        : (lang === "en" ? "OpenCode not found" : "未检测到 OpenCode");
+      this.lastStatus = {
+        connected: false, accountLabel: label, serverUrl: "",
+        models: [], agents: [], skills: [], mcpServers: [], errors: []
+      };
+      return this.lastStatus;
+    }
+
+    // ── opencode / auto mode: try to connect ──
+    let initialAccountLabel: string;
+    if (mode === "auto") {
+      initialAccountLabel = lang === "en" ? "Auto-detecting..." : "自动检测中...";
     } else {
-      initialAccountLabel = this.settings.settingsLanguage === "en" ? "Disconnected" : "未连接";
+      initialAccountLabel = lang === "en" ? "Disconnected" : "未连接";
     }
 
     this.lastStatus = {
@@ -219,34 +243,9 @@ export default class XiaoyuanPlugin extends Plugin {
         backend.listAgents()
       ]);
       const info = backend.getConnectionInfo();
-      
-      // 根据模式设置正确的账户标签
-      let successAccountLabel: string;
-      if (this.settings.assistantMode === "custom-api") {
-        const activeProvider = getActiveApiProvider(this.settings);
-        if (activeProvider) {
-          successAccountLabel = this.settings.settingsLanguage === "en" 
-            ? `Custom API: ${activeProvider.name}` 
-            : `自定义 API：${activeProvider.name}`;
-        } else {
-          successAccountLabel = this.settings.settingsLanguage === "en" ? "No API provider" : "未配置 API";
-        }
-      } else if (this.settings.assistantMode === "hybrid") {
-        const activeProvider = getActiveApiProvider(this.settings);
-        const openCodeLabel = this.settings.settingsLanguage === "en" ? "OpenCode" : "OpenCode";
-        if (activeProvider) {
-          const apiLabel = this.settings.settingsLanguage === "en" 
-            ? `Custom API: ${activeProvider.name}` 
-            : `自定义 API：${activeProvider.name}`;
-          successAccountLabel = this.settings.settingsLanguage === "en" 
-            ? `${apiLabel} + ${openCodeLabel}` 
-            : `${apiLabel} + ${openCodeLabel}`;
-        } else {
-          successAccountLabel = openCodeLabel;
-        }
-      } else { // opencode mode
-        successAccountLabel = this.settings.settingsLanguage === "en" ? "OpenCode" : "OpenCode";
-      }
+      this.openCode = new OpenCodeApi({ baseUrl: info.serverUrl, directory: this.getVaultPath() });
+
+      const successAccountLabel = lang === "en" ? "OpenCode" : "OpenCode";
 
       this.lastStatus = {
         connected: true,
@@ -266,8 +265,10 @@ export default class XiaoyuanPlugin extends Plugin {
       this.lastStatus.errors = [message];
       this.settings.opencode.lastError = message;
       await this.saveSettings(true);
-      if (!options.silent) {
-        new Notice(this.settings.settingsLanguage === "en" ? `OpenCode connection failed: ${message}` : `OpenCode 连接失败：${message}`);
+
+      // auto mode: silently fall back (errors still recorded for display)
+      if (mode !== "auto" && !options.silent) {
+        new Notice(lang === "en" ? `OpenCode connection failed: ${message}` : `OpenCode 连接失败：${message}`);
       }
     } finally {
       await backend.disconnect();
