@@ -156,7 +156,7 @@ export class XiaoyuanView extends ItemView {
   }
 
   getViewType(): string {
-    return VIEW_TYPE_CODEX;
+    return VIEW_TYPE_XIAOYUAN;
   }
 
   getDisplayText(): string {
@@ -717,7 +717,7 @@ export class XiaoyuanView extends ItemView {
     this.updateUsageHeader(cachedRateLimits, true, null);
     this.renderUsagePanel(cachedRateLimits, null, true);
 
-    const status = await this.plugin.ensureCodexConnected();
+    const status = await this.plugin.ensureOpenCodeConnected();
     if (requestId !== this.usageRequestId) return;
     if (!status.connected || !this.plugin.codex) {
       this.usageLoading = false;
@@ -2382,7 +2382,7 @@ export class XiaoyuanView extends ItemView {
     try {
       const workspaceReady = knowledgeSession ? true : await this.ensureChatWorkspaceSelected(session);
       if (!workspaceReady) return;
-      const status = await this.plugin.ensureCodexConnected();
+      const status = await this.plugin.ensureOpenCodeConnected();
       this.applyStatus();
       if (!status.connected) throw new Error(status.errors[0] || "Codex 未连接");
       session = this.ensureSession();
@@ -2593,7 +2593,7 @@ export class XiaoyuanView extends ItemView {
         usedInLastRun: false
       });
       this.setEditorActionStatus({ status: "connecting", actionLabel: request.action.label, qualityMode: request.qualityMode, modeLabel: request.modeConfig.label, filePath: request.source.filePath, model: request.modeConfig.model, startedAt: requestStartedAt });
-      const status = await this.withEditorActionTimeout(this.plugin.ensureCodexConnected(false, { silent: true }), timeoutMs, "写作操作连接超时");
+      const status = await this.withEditorActionTimeout(this.plugin.ensureOpenCodeConnected(false, { silent: true }), timeoutMs, "写作操作连接超时");
       this.applyStatus();
       if (!status.connected) throw new Error(status.errors[0] || "Codex 未连接");
 
@@ -2838,7 +2838,7 @@ export class XiaoyuanView extends ItemView {
     const harnessRunId = newId("article-understanding-refresh");
     this.editorActionHarnessRunId = harnessRunId;
     try {
-      const status = await this.plugin.ensureCodexConnected(false, { silent: true });
+      const status = await this.plugin.ensureOpenCodeConnected(false, { silent: true });
       if (!status.connected) throw new Error("Codex 未连接");
       const model = this.effectiveEditorActionModel(status.models.map((item) => item.model), modeConfig.model);
       const request: EditorActionRequest = {
@@ -3081,7 +3081,7 @@ export class XiaoyuanView extends ItemView {
   }
 
   private async createEditorActionPrewarmThread(): Promise<string | null> {
-    const status = await this.plugin.ensureCodexConnected(false, { silent: true });
+    const status = await this.plugin.ensureOpenCodeConnected(false, { silent: true });
     if (!status.connected || !this.plugin.codex || this.running) return null;
     const modeConfig = resolveEditorActionModeConfig(this.plugin.settings.editorActions);
     const turnOptions = {
@@ -3273,7 +3273,7 @@ export class XiaoyuanView extends ItemView {
   private async startThreadForSession(session: StoredSession): Promise<boolean> {
     if (session.threadId) return true;
     if (!normalizeWorkspacePath(session.cwd) || !workspaceDirectoryExists(session.cwd)) return false;
-    const status = await this.plugin.ensureCodexConnected();
+    const status = await this.plugin.ensureOpenCodeConnected();
     if (!status.connected || !this.plugin.codex || session.threadId) return Boolean(session.threadId);
     const started = await this.plugin.codex.startThread(this.currentTurnOptions(session));
     session.threadId = started.threadId;
@@ -3624,7 +3624,7 @@ export class XiaoyuanView extends ItemView {
     this.mcpPanelEl.empty();
     this.mcpPanelEl.createDiv({ cls: "codex-mcp-title", text: "MCP 状态" });
     this.mcpPanelEl.createDiv({ cls: "codex-mcp-empty", text: "正在读取 MCP 状态..." });
-    const status = await this.plugin.ensureCodexConnected();
+    const status = await this.plugin.ensureOpenCodeConnected();
     if (!status.connected || !this.plugin.codex) {
       this.renderMcpPanel([], "Codex 未连接");
       return;

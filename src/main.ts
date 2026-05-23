@@ -27,6 +27,7 @@ import { ReviewManager } from "./review/manager";
 import { ReviewPreviewView, VIEW_TYPE_REVIEW_PREVIEW } from "./review/preview-view";
 import { isReviewHtmlPath } from "./review/schedule";
 import type { AgentModelInfo, AgentProfileInfo } from "./agent/types";
+import type { CodexSkill, McpServerStatus } from "./types/app-server";
 
 export interface OpenCodeStatusSnapshot {
   connected: boolean;
@@ -34,6 +35,8 @@ export interface OpenCodeStatusSnapshot {
   serverUrl: string;
   models: AgentModelInfo[];
   agents: AgentProfileInfo[];
+  skills: CodexSkill[];
+  mcpServers: McpServerStatus[];
   errors: string[];
 }
 
@@ -175,12 +178,29 @@ export default class CodexForObsidianPlugin extends Plugin {
   async ensureOpenCodeConnected(force = false, options: { silent?: boolean } = {}): Promise<OpenCodeStatusSnapshot> {
     if (this.lastStatus?.connected && !force) return this.lastStatus;
 
+    // 根据模式设置初始账户标签
+    let initialAccountLabel: string;
+    if (this.settings.assistantMode === "custom-api") {
+      const activeProvider = getActiveApiProvider(this.settings);
+      if (activeProvider) {
+        initialAccountLabel = this.settings.settingsLanguage === "en" 
+          ? `Custom API: ${activeProvider.name}` 
+          : `自定义 API：${activeProvider.name}`;
+      } else {
+        initialAccountLabel = this.settings.settingsLanguage === "en" ? "No API provider" : "未配置 API";
+      }
+    } else {
+      initialAccountLabel = this.settings.settingsLanguage === "en" ? "Disconnected" : "未连接";
+    }
+
     this.lastStatus = {
       connected: false,
-      accountLabel: this.settings.settingsLanguage === "en" ? "Disconnected" : "未连接",
+      accountLabel: initialAccountLabel,
       serverUrl: "",
       models: [],
       agents: [],
+      skills: [],
+      mcpServers: [],
       errors: []
     };
 
@@ -196,12 +216,43 @@ export default class CodexForObsidianPlugin extends Plugin {
         backend.listAgents()
       ]);
       const info = backend.getConnectionInfo();
+      
+      // 根据模式设置正确的账户标签
+      let successAccountLabel: string;
+      if (this.settings.assistantMode === "custom-api") {
+        const activeProvider = getActiveApiProvider(this.settings);
+        if (activeProvider) {
+          successAccountLabel = this.settings.settingsLanguage === "en" 
+            ? `Custom API: ${activeProvider.name}` 
+            : `自定义 API：${activeProvider.name}`;
+        } else {
+          successAccountLabel = this.settings.settingsLanguage === "en" ? "No API provider" : "未配置 API";
+        }
+      } else if (this.settings.assistantMode === "hybrid") {
+        const activeProvider = getActiveApiProvider(this.settings);
+        const openCodeLabel = this.settings.settingsLanguage === "en" ? "OpenCode" : "OpenCode";
+        if (activeProvider) {
+          const apiLabel = this.settings.settingsLanguage === "en" 
+            ? `Custom API: ${activeProvider.name}` 
+            : `自定义 API：${activeProvider.name}`;
+          successAccountLabel = this.settings.settingsLanguage === "en" 
+            ? `${apiLabel} + ${openCodeLabel}` 
+            : `${apiLabel} + ${openCodeLabel}`;
+        } else {
+          successAccountLabel = openCodeLabel;
+        }
+      } else { // opencode mode
+        successAccountLabel = this.settings.settingsLanguage === "en" ? "OpenCode" : "OpenCode";
+      }
+
       this.lastStatus = {
         connected: true,
-        accountLabel: this.settings.settingsLanguage === "en" ? "Connected" : "已连接",
+        accountLabel: successAccountLabel,
         serverUrl: info.serverUrl,
         models,
         agents,
+        skills: [],
+        mcpServers: [],
         errors: []
       };
       this.settings.opencode.lastConnectedAt = Date.now();

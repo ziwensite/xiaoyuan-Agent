@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "updatedAt": 1779510123785,
+  "sessions": [
+    {
+      "sessionId": "session-1779496663747-oftpn4",
+      "title": "知识库管理",
+      "kind": "knowledge-base",
+      "activeDate": "2026-05-23",
+      "messageCount": 2,
+      "dayCount": 1,
+      "updatedAt": 1779500468893,
+      "days": [
+        {
+          "date": "2026-05-23",
+          "messageCount": 2,
+          "userMessageCount": 1,
+          "assistantMessageCount": 1,
+          "processMessageCount": 0,
+          "failedMessageCount": 0,
+          "firstMessageAt": 1779500464850,
+          "lastMessageAt": 1779500464850
+        }
+      ]
+    }
+  ]
+}

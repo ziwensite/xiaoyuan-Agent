@@ -4,7 +4,7 @@
   "description": "小元 - 使用 OpenCode 的 Obsidian 助手插件",
   "main": "dist/main.js",
   "scripts": {
-    "build": "node esbuild.config.mjs production",
+    "build": "node esbuild.config.mjs production && cmd /c copy dist\\main.js main.js",
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",

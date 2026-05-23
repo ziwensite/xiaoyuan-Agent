@@ -1354,13 +1354,6 @@ body.theme-light .codex-code-wrapper pre {
   gap: 10px;
 }
 
-.codex-api-provider-title {
-  min-width: 0;
-  color: var(--text-normal);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .codex-api-provider-actions {
   flex: 0 0 auto;
   flex-wrap: wrap;
@@ -4161,4 +4154,42 @@ body.theme-light .codex-container {
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
   background: #fffdf8;
+}
+
+.codex-api-provider-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.codex-api-provider-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.codex-api-provider-toggle:hover {
+  color: var(--text-normal);
+}
+
+.codex-api-provider-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.codex-api-provider-content {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
 }

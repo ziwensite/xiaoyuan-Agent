@@ -82,6 +82,7 @@ export type ProviderMode = "custom-api";
 export type ResourceManagementTab = "plugins" | "mcp" | "skills";
 export type AgentBackendMode = "opencode";
 export type KnowledgeBaseBackendMode = "opencode";
+export type AssistantMode = "opencode" | "custom-api" | "hybrid";
 export type KnowledgeBaseRunStatus = "idle" | "running" | "success" | "failed" | "canceled";
 export type KnowledgeBaseInitStatus = "not-started" | "preview-ready" | "initialized" | "failed";
 export type KnowledgeBaseCaptureTarget = "inbox" | "raw-articles" | "raw-attachments" | "journal";
@@ -108,11 +109,7 @@ export interface OpenCodeSettings {
   lastError: string;
 }
 
-export interface SetupSettings {
-  completedAt: number;
-  lastCheckedAt: number;
-  dismissedVersion: string;
-}
+
 
 export interface KnowledgeBaseProcessedSource {
   path: string;
@@ -218,6 +215,7 @@ export interface CodexForObsidianSettings {
   settingsLanguage: SettingsLanguage;
   settingsTab: SettingsTab;
   agentBackend: AgentBackendMode;
+  assistantMode: AssistantMode;
   proxyEnabled: boolean;
   proxyUrl: string;
   providerMode: ProviderMode;
@@ -231,7 +229,6 @@ export interface CodexForObsidianSettings {
   defaultMode: UiMode;
   autoOpen: boolean;
   showContext: boolean;
-  setup: SetupSettings;
   resourceManagementTab: ResourceManagementTab;
   editorActions: EditorAiActionSettings;
   opencode: OpenCodeSettings;
@@ -408,6 +405,7 @@ export const DEFAULT_SETTINGS: CodexForObsidianSettings = {
   settingsLanguage: "zh-CN",
   settingsTab: "general",
   agentBackend: "opencode",
+  assistantMode: "opencode",
   proxyEnabled: false,
   proxyUrl: "http://127.0.0.1:7890",
   providerMode: "custom-api",
@@ -421,11 +419,6 @@ export const DEFAULT_SETTINGS: CodexForObsidianSettings = {
   defaultMode: "agent",
   autoOpen: false,
   showContext: true,
-  setup: {
-    completedAt: 0,
-    lastCheckedAt: 0,
-    dismissedVersion: ""
-  },
   resourceManagementTab: "plugins",
   editorActions: {
     enabled: false,
@@ -537,7 +530,6 @@ export function normalizeSettingsData(data: any): { settings: CodexForObsidianSe
     providerMode: "custom-api",
     activeApiProviderId: typeof data?.activeApiProviderId === "string" ? data.activeApiProviderId.trim() : "",
     apiProviders: normalizeApiProviders(data?.apiProviders),
-    setup: normalizeSetupSettings(data?.setup),
     resourceManagementTab: normalizeResourceManagementTab(data?.resourceManagementTab),
     editorActions: normalizeEditorActionSettings(data?.editorActions, previousVersion),
     opencode: normalizeOpenCodeSettings(data?.opencode),
@@ -991,14 +983,6 @@ function normalizeOpenCodeSettings(value: any): OpenCodeSettings {
     pdfEnabled: value?.pdfEnabled === true,
     lastConnectedAt: normalizeNonNegativeNumber(value?.lastConnectedAt),
     lastError: normalizeOptionalText(value?.lastError)
-  };
-}
-
-function normalizeSetupSettings(value: any): SetupSettings {
-  return {
-    completedAt: normalizeNonNegativeNumber(value?.completedAt),
-    lastCheckedAt: normalizeNonNegativeNumber(value?.lastCheckedAt),
-    dismissedVersion: normalizeOptionalText(value?.dismissedVersion)
   };
 }
 

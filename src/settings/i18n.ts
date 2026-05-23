@@ -32,6 +32,15 @@ const ZH_CN = {
     delete: "删除",
     clear: "清空"
   },
+  mode: {
+    title: "智能助理模式",
+    opencode: "OpenCode 模式",
+    customApi: "API 模式",
+    hybrid: "API + OpenCode 模式",
+    opencodeDesc: "所有功能由 OpenCode 提供",
+    customApiDesc: "所有功能由自定义 API 提供",
+    hybridDesc: "思考规划用 API，执行操作用 OpenCode"
+  },
   status: {
     codexStatus: "连接状态",
     accountStatus: "账号状态",
@@ -39,6 +48,7 @@ const ZH_CN = {
     connection: "连接方式",
     cliPath: "CLI 路径",
     opencode: "OpenCode",
+    currentModel: "当前模型",
     proxy: "代理",
     chatMcp: "聊天 MCP",
     modelCount: "模型数量",
@@ -52,22 +62,10 @@ const ZH_CN = {
     refreshSuccess: (account: string) => `小元 已刷新：${account}`,
     refreshFailed: (error: string) => `小元 连接失败：${error}`
   },
-  setup: {
-    blockedTitle: (count: number) => `启动前还差 ${count} 项`,
-    blockedDesc: "按下面提示安装或登录后，点击重新检测。",
-    readyTitle: "环境已就绪",
-    readyDesc: "必要环境已通过，可以开始使用小元 助理。",
-    checking: "正在重新检测",
-    recheck: "重新检测",
-    checkingButton: "检测中",
-    start: "Start",
-    copied: "已复制",
-    startBlocked: "环境还没通过，请先重新检测。",
-    lastChecked: (time: string) => `上次检测：${time}`
-  },
+
   tabs: {
     general: "基础设置",
-    providers: "API Provider",
+    providers: "API 设置",
     resources: "工作区能力",
     editorActions: "写作操作",
     knowledgeBase: "知识库管理",
@@ -233,7 +231,9 @@ const ZH_CN = {
     openHtmlAfterRun: "生成后打开 HTML"
   },
   providers: {
-    title: "API Provider",
+    title: "API 设置",
+    opencodeMode: "OpenCode API 模式",
+    customApiMode: "自定义 API 模式",
     warningKey: "API key 会明文保存在 Obsidian 插件数据里；只建议本机使用，不建议同步或提交。",
     warningApi: "自定义 API 仍需要本机 Codex CLI。Base URL 必须兼容 OpenAI Responses API；只支持 /v1/chat/completions 的通用 OpenAI 格式通常不可用。",
     loginMode: "Codex 登录态",
@@ -383,6 +383,15 @@ const EN: SettingsCopy = {
     delete: "Delete",
     clear: "Clear"
   },
+  mode: {
+    title: "Assistant Mode",
+    opencode: "OpenCode Mode",
+    customApi: "API Mode",
+    hybrid: "API + OpenCode Mode",
+    opencodeDesc: "All features provided by OpenCode",
+    customApiDesc: "All features provided by custom API",
+    hybridDesc: "Thinking & planning with API, execution with OpenCode"
+  },
   status: {
     codexStatus: "Status",
     accountStatus: "Account",
@@ -390,6 +399,7 @@ const EN: SettingsCopy = {
     connection: "Connection",
     cliPath: "CLI path",
     opencode: "OpenCode",
+    currentModel: "Current model",
     proxy: "Proxy",
     chatMcp: "Chat MCP",
     modelCount: "Models",
@@ -403,22 +413,10 @@ const EN: SettingsCopy = {
     refreshSuccess: (account) => `XiaoYuan refreshed: ${account}`,
     refreshFailed: (error) => `XiaoYuan failed: ${error}`
   },
-  setup: {
-    blockedTitle: (count) => `${count} item${count === 1 ? "" : "s"} before startup`,
-    blockedDesc: "Install or sign in using the steps below, then run the check again.",
-    readyTitle: "Environment ready",
-    readyDesc: "Required runtime checks passed. You can start using XiaoYuan Assistant.",
-    checking: "Checking environment",
-    recheck: "Run check again",
-    checkingButton: "Checking",
-    start: "Start",
-    copied: "Copied",
-    startBlocked: "The environment is not ready yet. Run the check again first.",
-    lastChecked: (time) => `Last checked: ${time}`
-  },
+
   tabs: {
     general: "General",
-    providers: "API Provider",
+    providers: "API Settings",
     resources: "Capabilities",
     editorActions: "Writing",
     knowledgeBase: "Knowledge",
@@ -584,7 +582,9 @@ const EN: SettingsCopy = {
     openHtmlAfterRun: "Open HTML after run"
   },
   providers: {
-    title: "API Provider",
+    title: "API Settings",
+    opencodeMode: "OpenCode API Mode",
+    customApiMode: "Custom API Mode",
     warningKey: "API keys are stored as plain text in Obsidian plugin data. Use locally only; do not sync or commit them.",
     warningApi: "Custom APIs still require local Codex CLI. Base URL must support OpenAI Responses API. Generic /v1/chat/completions-only services may not work.",
     loginMode: "Codex login",

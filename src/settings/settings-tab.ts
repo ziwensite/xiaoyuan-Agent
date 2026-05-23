@@ -50,7 +50,6 @@ import { AGENTS_RULES_FILE, CODEX_MEMORY_LITE_URL, DEFAULT_KNOWLEDGE_BASE_RULES_
 import { repairKnowledgeBaseRulesFile } from "../knowledge-base/rules-repair";
 import { confirmModal } from "../ui/modals";
 import { SETTINGS_LANGUAGE_OPTIONS, settingsCopy, type SettingsCopy } from "./i18n";
-import { buildSetupCheck, completeSetupState, type SetupAction, type SetupCheckResult, type SetupPlatform } from "./setup-check";
 
 export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private resourceSnapshot: WorkspaceResourceSnapshot | null = null;
@@ -67,13 +66,16 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private openCodeAgentsLoaded = false;
   private openCodeAgentsLoading = false;
   private openCodeAgentsError = "";
-  private setupChecking = false;
+  private collapsedProviders: Record<string, boolean> = {};
 
   constructor(private readonly plugin: CodexForObsidianPlugin) {
     super(plugin.app, plugin);
     this.resourceSnapshot = snapshotFromWorkspaceResourceCache(this.plugin.settings.workspaceResourceCache);
     this.resourceLoaded = loadedTabsFromWorkspaceResourceCache(this.plugin.settings.workspaceResourceCache);
     this.resourceLoadErrors = errorsFromWorkspaceResourceCache(this.plugin.settings.workspaceResourceCache);
+    this.collapsedProviders = Object.fromEntries(
+      plugin.settings.apiProviders.map(p => [p.id, true])
+    );
   }
 
   private get copy(): SettingsCopy {
@@ -84,27 +86,63 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const copy = this.copy;
     containerEl.empty();
-    new Setting(containerEl).setName(copy.title).setHeading();
+    
+    const mode = this.plugin.settings.assistantMode;
+    
+    // Mode selector - 智能助理模式选择
+    this.decorateSetting(new Setting(containerEl)
+      .setName(copy.mode.title)
+      .setDesc(mode === "opencode" ? copy.mode.opencodeDesc : (mode === "custom-api" ? copy.mode.customApiDesc : copy.mode.hybridDesc))
+      .addDropdown(dropdown => {
+        dropdown
+          .addOption("opencode", copy.mode.opencode)
+          .addOption("custom-api", copy.mode.customApi)
+          .addOption("hybrid", copy.mode.hybrid)
+          .setValue(this.plugin.settings.assistantMode)
+          .onChange(async (value: any) => {
+            this.plugin.settings.assistantMode = value;
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      }), "bot");
 
     const status = this.plugin.lastStatus;
-    const setupCheck = buildSetupCheck(this.plugin.settings, status, this.detectSetupPlatform());
     const statusBox = containerEl.createDiv({ cls: "codex-settings-status" });
-    if (this.shouldShowSetupGuide(setupCheck)) {
-      this.renderSetupGuide(statusBox, setupCheck);
-    } else {
+    
+    // 根据模式显示不同的连接状态
+    if (mode === "opencode") {
+      // OpenCode 模式
       this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
-      this.addStatusRow(statusBox, "user-check", copy.status.accountStatus, status?.connected ? (status.accountLabel ?? copy.common.unknown) : copy.common.disconnected);
+      this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
+      this.addStatusRow(statusBox, "box", copy.status.currentModel, this.plugin.settings.opencode.modelId || this.plugin.settings.defaultModel || copy.common.unknown);
+    } else if (mode === "custom-api") {
+      // API 模式
+      const activeProvider = getActiveApiProvider(this.plugin.settings);
+      const apiConnected = activeProvider && activeProvider.baseUrl && activeProvider.apiKey;
+      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, apiConnected ? copy.common.connected : copy.common.disconnected);
+      this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
+      if (activeProvider) {
+        this.addStatusRow(statusBox, "box", copy.status.currentModel, activeProvider.model || copy.common.unknown);
+      }
+    } else {
+      // 混合模式
+      this.addStatusRow(statusBox, "activity", copy.status.codexStatus, status?.connected ? copy.common.connected : copy.common.disconnected);
       this.addStatusRow(statusBox, "key-round", copy.status.connection, providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage));
       this.addStatusRow(statusBox, "terminal-square", copy.status.opencode, detectOpenCodePath(this.plugin.settings.opencode.cliPath, copy));
-      this.addStatusRow(statusBox, "waypoints", copy.status.proxy, this.plugin.settings.proxyEnabled ? this.plugin.settings.proxyUrl : copy.common.disabled);
-      this.addStatusRow(statusBox, "blocks", copy.status.chatMcp, this.plugin.settings.mcpEnabled ? copy.common.enabled : copy.common.disabled);
-      this.addStatusRow(statusBox, "box", copy.status.modelCount, `${status?.models.length ?? 0}`);
-      this.addStatusRow(statusBox, "sparkles", copy.status.skillsCount, `${status?.skills.length ?? 0}`);
-      this.addStatusRow(statusBox, "blocks", copy.status.mcpCount, `${status?.mcpServers.length ?? 0}`);
-      this.addStatusRow(statusBox, "package-check", copy.status.pluginDir, pluginInstallDir(this.plugin));
-      this.addStatusErrors(statusBox, status?.errors ?? []);
-      this.addStatusActions(statusBox);
+      const activeProvider = getActiveApiProvider(this.plugin.settings);
+      if (activeProvider) {
+        this.addStatusRow(statusBox, "box", copy.status.currentModel, activeProvider.model || copy.common.unknown);
+      }
     }
+    
+    // 通用状态行
+    this.addStatusRow(statusBox, "waypoints", copy.status.proxy, this.plugin.settings.proxyEnabled ? this.plugin.settings.proxyUrl : copy.common.disabled);
+    this.addStatusRow(statusBox, "blocks", copy.status.chatMcp, this.plugin.settings.mcpEnabled ? copy.common.enabled : copy.common.disabled);
+    this.addStatusRow(statusBox, "sparkles", copy.status.skillsCount, `${status?.skills.length ?? 0}`);
+    this.addStatusRow(statusBox, "blocks", copy.status.mcpCount, `${status?.mcpServers.length ?? 0}`);
+    this.addStatusRow(statusBox, "package-check", copy.status.pluginDir, pluginInstallDir(this.plugin));
+    this.addStatusErrors(statusBox, status?.errors ?? []);
+    this.addStatusActions(statusBox);
 
     this.renderTopTabs(containerEl);
     if (this.plugin.settings.settingsTab === "providers") {
@@ -254,7 +292,6 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderKnowledgeBaseSettings(container: HTMLElement): void {
     const copy = this.copy;
     const settings = this.plugin.settings.knowledgeBase;
-    const opencode = this.plugin.settings.opencode;
     const wrapper = container.createDiv({ cls: "codex-api-provider-manager codex-knowledge-settings" });
     const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
     const title = header.createDiv({ cls: "codex-resource-manager-title" });
@@ -329,57 +366,6 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
         await this.plugin.saveSettings();
       })
     ), "history");
-
-    const openCodeSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
-    openCodeSection.createDiv({ cls: "codex-editor-actions-heading", text: copy.knowledge.opencodeMode });
-    openCodeSection.createDiv({ cls: "codex-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
-    this.addProviderText(openCodeSection, copy.knowledge.opencodePath, opencode.cliPath, "/opt/homebrew/bin/opencode", async (value) => {
-      opencode.cliPath = value.trim();
-      await this.plugin.saveSettings();
-      this.display();
-    });
-    this.addProviderText(openCodeSection, copy.knowledge.serverUrl, opencode.serverUrl, "http://127.0.0.1:4096", async (value) => {
-      opencode.serverUrl = value.trim().replace(/\/$/, "");
-      await this.plugin.saveSettings();
-    });
-    this.decorateSetting(new Setting(openCodeSection).setName(copy.knowledge.autoStartServer).addToggle((toggle) =>
-      toggle.setValue(opencode.autoStart).onChange(async (value) => {
-        opencode.autoStart = value;
-        await this.plugin.saveSettings();
-      })
-    ), "power");
-    this.addProviderText(openCodeSection, copy.opencode.host, opencode.hostname, "127.0.0.1", async (value) => {
-      opencode.hostname = value.trim() || "127.0.0.1";
-      await this.plugin.saveSettings();
-    });
-    this.addProviderText(openCodeSection, copy.opencode.port, String(opencode.port), "4096", async (value) => {
-      opencode.port = parseClampedInteger(value, 4096, 1024, 65535);
-      await this.plugin.saveSettings();
-      this.display();
-    });
-    this.addOpenCodeModelPicker(openCodeSection);
-    this.addProviderText(openCodeSection, copy.opencode.providerId, opencode.providerId, "anthropic", async (value) => {
-      opencode.providerId = value.trim();
-      await this.plugin.saveSettings();
-    });
-    this.addProviderText(openCodeSection, copy.opencode.modelId, opencode.modelId, "claude-sonnet-4-20250514", async (value) => {
-      opencode.modelId = value.trim();
-      await this.plugin.saveSettings();
-    });
-    this.addOpenCodeAgentPicker(openCodeSection);
-    openCodeSection.createDiv({
-      cls: "codex-resource-note",
-      text: copy.knowledge.modelCapabilities(opencode.textEnabled, opencode.imageEnabled, opencode.pdfEnabled)
-    });
-    if (opencode.lastError) openCodeSection.createDiv({ cls: "codex-resource-error", text: opencode.lastError });
-    if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeModelsError });
-    if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeAgentsError });
-    const openCodeActions = openCodeSection.createDiv({ cls: "codex-api-provider-actions" });
-    const testOpenCode = openCodeActions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
-    testOpenCode.onclick = async () => {
-      await this.refreshOpenCodeRuntimeOptions();
-      this.display();
-    };
 
     wrapper.createDiv({
       cls: "codex-resource-note",
@@ -526,117 +512,7 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
     ), "panel-right-open");
   }
 
-  private shouldShowSetupGuide(check: SetupCheckResult): boolean {
-    return this.plugin.settings.setup.completedAt <= 0 || check.status === "blocking";
-  }
 
-  private renderSetupGuide(container: HTMLElement, check: SetupCheckResult): void {
-    const copy = this.copy;
-    container.addClass("codex-setup-guide");
-    container.toggleClass("is-ready", check.canStart);
-    container.toggleClass("is-blocking", !check.canStart);
-
-    const header = container.createDiv({ cls: "codex-setup-header" });
-    const icon = header.createSpan({ cls: "codex-settings-status-icon" });
-    setIcon(icon, check.canStart ? "rocket" : "wrench");
-    const title = header.createDiv({ cls: "codex-setup-title" });
-    title.createDiv({
-      cls: "codex-setup-heading",
-      text: this.setupChecking
-        ? copy.setup.checking
-        : check.canStart
-          ? copy.setup.readyTitle
-          : copy.setup.blockedTitle(check.blockingCount)
-    });
-    title.createDiv({
-      cls: "codex-setup-subtitle",
-      text: check.canStart ? copy.setup.readyDesc : copy.setup.blockedDesc
-    });
-
-    const list = container.createDiv({ cls: "codex-setup-list" });
-    for (const requirement of check.requirements) {
-      const row = list.createDiv({ cls: `codex-setup-item is-${requirement.status}` });
-      const statusIcon = row.createSpan({ cls: "codex-setup-item-icon" });
-      setIcon(statusIcon, setupRequirementIcon(requirement.status));
-      const body = row.createDiv({ cls: "codex-setup-item-body" });
-      body.createDiv({ cls: "codex-setup-item-title", text: requirement.title });
-      body.createDiv({ cls: "codex-setup-item-message", text: requirement.message });
-      if (requirement.actions.length) {
-        const actions = body.createDiv({ cls: "codex-setup-item-actions" });
-        for (const action of requirement.actions) this.addSetupActionButton(actions, action);
-      }
-    }
-
-    const actions = container.createDiv({ cls: "codex-settings-status-actions codex-setup-actions" });
-    const refresh = actions.createEl("button", {
-      cls: "codex-resource-refresh",
-      text: this.setupChecking ? copy.setup.checkingButton : copy.setup.recheck,
-      attr: { type: "button" }
-    });
-    refresh.disabled = this.setupChecking;
-    refresh.onclick = () => void this.runSetupCheck();
-    if (check.canStart) {
-      const start = actions.createEl("button", {
-        cls: "codex-setup-start",
-        text: copy.setup.start,
-        attr: { type: "button" }
-      });
-      start.disabled = this.setupChecking;
-      start.onclick = () => void this.completeSetupAndStart();
-    }
-
-    if (this.plugin.settings.setup.lastCheckedAt > 0) {
-      container.createDiv({ cls: "codex-setup-last-checked", text: copy.setup.lastChecked(formatSetupTime(this.plugin.settings.setup.lastCheckedAt)) });
-    }
-  }
-
-  private addSetupActionButton(container: HTMLElement, action: SetupAction): void {
-    const button = container.createEl("button", { cls: "codex-setup-action", text: action.label, attr: { type: "button" } });
-    button.onclick = async () => {
-      if (action.kind === "open-url") {
-        window.open(action.value);
-        return;
-      }
-      await navigator.clipboard.writeText(action.value);
-      const original = action.label;
-      button.setText(this.copy.setup.copied);
-      window.setTimeout(() => button.setText(original), 1200);
-    };
-  }
-
-  private async runSetupCheck(): Promise<void> {
-    if (this.setupChecking) return;
-    this.setupChecking = true;
-    this.display();
-    try {
-      await this.plugin.ensureOpenCodeConnected();
-      await this.refreshOpenCodeRuntimeOptions({ models: true, agents: true });
-      this.plugin.settings.setup.lastCheckedAt = Date.now();
-      await this.plugin.saveSettings(true);
-    } finally {
-      this.setupChecking = false;
-      this.display();
-    }
-  }
-
-  private async completeSetupAndStart(): Promise<void> {
-    const check = buildSetupCheck(this.plugin.settings, this.plugin.lastStatus, this.detectSetupPlatform());
-    if (!check.canStart) {
-      new Notice(this.copy.setup.startBlocked);
-      return;
-    }
-    this.plugin.settings.setup = completeSetupState(this.plugin.settings.setup, Date.now(), this.plugin.manifest.version);
-    await this.plugin.saveSettings(true);
-    await this.plugin.activateView();
-    this.display();
-  }
-
-  private detectSetupPlatform(): SetupPlatform {
-    return {
-      os: process.platform,
-      openCodeCommand: detectOpenCodeCommand(this.plugin.settings.opencode.cliPath)
-    };
-  }
 
   private addStatusActions(container: HTMLElement): void {
     const copy = this.copy;
@@ -693,28 +569,72 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderApiProviderManager(container: HTMLElement): void {
     const copy = this.copy;
     const wrapper = container.createDiv({ cls: "codex-api-provider-manager" });
-    const header = wrapper.createDiv({ cls: "codex-resource-manager-header" });
-    const title = header.createDiv({ cls: "codex-resource-manager-title" });
-    const icon = title.createSpan({ cls: "codex-setting-icon" });
-    setIcon(icon, "key-round");
-    title.createSpan({ text: copy.providers.title });
 
-    wrapper.createDiv({
-      cls: "codex-resource-warning",
-      text: copy.providers.warningKey
+    const opencode = this.plugin.settings.opencode;
+    const openCodeSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
+    const openCodeHeader = openCodeSection.createDiv({ cls: "codex-resource-manager-header" });
+    const openCodeTitle = openCodeHeader.createDiv({ cls: "codex-resource-manager-title" });
+    const openCodeIcon = openCodeTitle.createSpan({ cls: "codex-setting-icon" });
+    setIcon(openCodeIcon, "terminal-square");
+    openCodeTitle.createSpan({ text: copy.providers.opencodeMode });
+    
+    openCodeSection.createDiv({ cls: "codex-resource-note", text: copy.knowledge.detection(detectOpenCodePath(opencode.cliPath, copy)) });
+    this.addProviderText(openCodeSection, copy.knowledge.opencodePath, opencode.cliPath, "/opt/homebrew/bin/opencode", async (value) => {
+      opencode.cliPath = value.trim();
+      await this.plugin.saveSettings();
+      this.display();
     });
-    wrapper.createDiv({
-      cls: "codex-resource-warning",
-      text: copy.providers.warningApi
+    this.addProviderText(openCodeSection, copy.knowledge.serverUrl, opencode.serverUrl, "http://127.0.0.1:4096", async (value) => {
+      opencode.serverUrl = value.trim().replace(/\/$/, "");
+      await this.plugin.saveSettings();
     });
+    this.decorateSetting(new Setting(openCodeSection).setName(copy.knowledge.autoStartServer).addToggle((toggle) =>
+      toggle.setValue(opencode.autoStart).onChange(async (value) => {
+        opencode.autoStart = value;
+        await this.plugin.saveSettings();
+      })
+    ), "power");
+    this.addProviderText(openCodeSection, copy.opencode.host, opencode.hostname, "127.0.0.1", async (value) => {
+      opencode.hostname = value.trim() || "127.0.0.1";
+      await this.plugin.saveSettings();
+    });
+    this.addProviderText(openCodeSection, copy.opencode.port, String(opencode.port), "4096", async (value) => {
+      opencode.port = parseClampedInteger(value, 4096, 1024, 65535);
+      await this.plugin.saveSettings();
+      this.display();
+    });
+    this.addOpenCodeModelPicker(openCodeSection);
+    this.addProviderText(openCodeSection, copy.opencode.providerId, opencode.providerId, "anthropic", async (value) => {
+      opencode.providerId = value.trim();
+      await this.plugin.saveSettings();
+    });
+    this.addProviderText(openCodeSection, copy.opencode.modelId, opencode.modelId, "claude-sonnet-4-20250514", async (value) => {
+      opencode.modelId = value.trim();
+      await this.plugin.saveSettings();
+    });
+    this.addOpenCodeAgentPicker(openCodeSection);
+    openCodeSection.createDiv({
+      cls: "codex-resource-note",
+      text: copy.knowledge.modelCapabilities(opencode.textEnabled, opencode.imageEnabled, opencode.pdfEnabled)
+    });
+    if (opencode.lastError) openCodeSection.createDiv({ cls: "codex-resource-error", text: opencode.lastError });
+    if (this.openCodeModelsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeModelsError });
+    if (this.openCodeAgentsError) openCodeSection.createDiv({ cls: "codex-resource-error", text: this.openCodeAgentsError });
+    const openCodeActions = openCodeSection.createDiv({ cls: "codex-api-provider-actions" });
+    const testOpenCode = openCodeActions.createEl("button", { cls: "codex-resource-tab", text: copy.knowledge.testConnection, attr: { type: "button" } });
+    testOpenCode.onclick = async () => {
+      await this.refreshOpenCodeRuntimeOptions();
+      this.display();
+    };
 
-    const modeRow = wrapper.createDiv({ cls: "codex-api-provider-mode" });
-    modeRow.createDiv({
-      cls: "codex-resource-summary",
-      text: copy.common.current(providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage))
-    });
+    const customApiSection = wrapper.createDiv({ cls: "codex-editor-actions-section" });
+    const customApiHeader = customApiSection.createDiv({ cls: "codex-resource-manager-header" });
+    const customApiTitle = customApiHeader.createDiv({ cls: "codex-resource-manager-title" });
+    const customApiIcon = customApiTitle.createSpan({ cls: "codex-setting-icon" });
+    setIcon(customApiIcon, "key-round");
+    customApiTitle.createSpan({ text: copy.providers.customApiMode });
 
-    const add = header.createEl("button", {
+    const add = customApiHeader.createEl("button", {
       cls: "codex-resource-refresh",
       text: copy.providers.add,
       attr: { type: "button", title: copy.providers.addTitle }
@@ -738,12 +658,27 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       this.display();
     };
 
+    customApiSection.createDiv({
+      cls: "codex-resource-warning",
+      text: copy.providers.warningKey
+    });
+    customApiSection.createDiv({
+      cls: "codex-resource-warning",
+      text: copy.providers.warningApi
+    });
+
+    const modeRow = customApiSection.createDiv({ cls: "codex-api-provider-mode" });
+    modeRow.createDiv({
+      cls: "codex-resource-summary",
+      text: copy.common.current(providerConnectionLabel(this.plugin.settings, this.plugin.settings.settingsLanguage))
+    });
+
     if (!this.plugin.settings.apiProviders.length) {
-      wrapper.createDiv({ cls: "codex-resource-empty", text: copy.providers.empty });
+      customApiSection.createDiv({ cls: "codex-resource-empty", text: copy.providers.empty });
       return;
     }
 
-    const body = wrapper.createDiv({ cls: "codex-api-provider-list" });
+    const body = customApiSection.createDiv({ cls: "codex-api-provider-list" });
     for (const provider of this.plugin.settings.apiProviders) {
       this.renderApiProviderRow(body, provider);
     }
@@ -944,15 +879,24 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
   private renderApiProviderRow(container: HTMLElement, provider: ApiProviderConfig): void {
     const copy = this.copy;
     const activeProvider = getActiveApiProvider(this.plugin.settings);
+    const isCollapsed = this.collapsedProviders[provider.id] !== false;
     const row = container.createDiv({
       cls: `codex-api-provider-row ${activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api" ? "is-active" : ""}`
     });
+    
     const head = row.createDiv({ cls: "codex-api-provider-head" });
+    
+    const toggleBtn = head.createEl("button", { cls: "codex-api-provider-toggle", attr: { type: "button" } });
+    setIcon(toggleBtn, isCollapsed ? "chevron-right" : "chevron-down");
+    toggleBtn.onclick = () => {
+      this.collapsedProviders[provider.id] = !isCollapsed;
+      this.display();
+    };
+    
     const title = head.createDiv({ cls: "codex-api-provider-title" });
-    const icon = title.createSpan({ cls: "codex-resource-row-icon" });
-    setIcon(icon, "key-round");
     title.createSpan({ text: provider.name || copy.providers.unnamed });
     title.createSpan({ cls: "codex-resource-row-meta", text: providerModelLabel(provider, this.plugin.settings.settingsLanguage) });
+    title.prepend(toggleBtn);
 
     const actions = head.createDiv({ cls: "codex-api-provider-actions" });
     const enable = actions.createEl("button", {
@@ -987,37 +931,40 @@ export class XiaoyuanAgentSettingTab extends PluginSettingTab {
       this.display();
     };
 
-    this.addProviderText(row, copy.providers.name, provider.name, copy.providers.namePlaceholder, async (value) => {
+    const content = row.createDiv({ cls: "codex-api-provider-content" });
+    if (isCollapsed) content.style.display = "none";
+
+    this.addProviderText(content, copy.providers.name, provider.name, copy.providers.namePlaceholder, async (value) => {
       provider.name = value.trim();
       await this.plugin.saveSettings();
       this.display();
     });
-    this.addProviderText(row, copy.providers.baseUrl, provider.baseUrl, "https://api.openai.com/v1", async (value) => {
+    this.addProviderText(content, copy.providers.baseUrl, provider.baseUrl, "https://api.openai.com/v1", async (value) => {
       provider.baseUrl = value.trim();
       await this.plugin.saveSettings();
     });
-    row.createDiv({ cls: "codex-resource-note", text: copy.providers.responseApiRequirement });
-    this.addProviderTextArea(row, copy.providers.models, getApiProviderModels(provider).join("\n"), "gpt-5.4\ngpt-5.5", async (value) => {
+    content.createDiv({ cls: "codex-resource-note", text: copy.providers.responseApiRequirement });
+    this.addProviderTextArea(content, copy.providers.models, getApiProviderModels(provider).join("\n"), "gpt-5.4\ngpt-5.5", async (value) => {
       const models = parseModelList(value);
       provider.models = models;
       provider.model = models[0] ?? "";
       await this.plugin.saveSettings();
       this.display();
     });
-    this.addProviderText(row, copy.providers.apiKey, provider.apiKey, "sk-...", async (value) => {
+    this.addProviderText(content, copy.providers.apiKey, provider.apiKey, "sk-...", async (value) => {
       provider.apiKey = value.trim();
       await this.plugin.saveSettings();
     }, "password");
-    this.addProviderTextArea(row, copy.providers.queryParams, formatQueryParams(provider.queryParams), "api-version=2026-04-28", async (value) => {
+    this.addProviderTextArea(content, copy.providers.queryParams, formatQueryParams(provider.queryParams), "api-version=2026-04-28", async (value) => {
       provider.queryParams = parseQueryParams(value);
       if (!Object.keys(provider.queryParams).length) delete provider.queryParams;
       await this.plugin.saveSettings();
     });
 
     const errors = validateApiProvider(provider, this.plugin.settings.settingsLanguage);
-    if (errors.length) row.createDiv({ cls: "codex-resource-error", text: copy.common.missing(errors) });
+    if (errors.length) content.createDiv({ cls: "codex-resource-error", text: copy.common.missing(errors) });
     if (activeProvider?.id === provider.id && this.plugin.settings.providerMode === "custom-api") {
-      row.createDiv({ cls: "codex-resource-note", text: copy.providers.configChanged });
+      content.createDiv({ cls: "codex-resource-note", text: copy.providers.configChanged });
     }
   }
 
@@ -1740,20 +1687,7 @@ function detectOpenCodePath(customPath: string, copy: SettingsCopy = settingsCop
   return found ? copy.common.detected(found) : copy.common.notDetectedManual;
 }
 
-function setupRequirementIcon(status: string): string {
-  if (status === "ok") return "check-circle-2";
-  if (status === "warning") return "circle-alert";
-  return "circle-x";
-}
 
-function formatSetupTime(value: number): string {
-  if (!value) return "";
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
 
 function agentBackendLabel(value: AgentBackendMode, copy: SettingsCopy = settingsCopy("zh-CN")): string {
   return copy.backendLabels[value] ?? "OpenCode API";
